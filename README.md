@@ -24,3 +24,10 @@ agent = sensors (body) + compressor + measure of compressor's progress + reward 
 - most "intelligent" actions can be derived from agent's desire to compress data
 
 - you can't predict pi statistically, but you can provide a short algorithm for it
+
+## Links
+
+### Zero-sum games
+
+Exploring the predictable: ftp://ftp.idsia.ch/pub/juergen/explorepredictable.pdf
+What’s interesting?: ftp://ftp.idsia.ch/pub/juergen/interest.ps.gz
