@@ -30,4 +30,5 @@ agent = sensors (body) + compressor + measure of compressor's progress + reward 
 ### Zero-sum games
 
 Exploring the predictable: ftp://ftp.idsia.ch/pub/juergen/explorepredictable.pdf
+
 What’s interesting?: ftp://ftp.idsia.ch/pub/juergen/interest.ps.gz
