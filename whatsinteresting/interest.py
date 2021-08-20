@@ -18,17 +18,58 @@ State = [0] * m
 InsSet = [i for i in range(0, n)]
 
 # brains
-RightBr = m * [[(1 / n)] * n]
-LeftBr = m * [[(1 / n)] * n]
+Brain = [m * [[(1 / n)] * n]] * 2
 
 # InstructionPointer
 InsPointer = 0
 
-StackRight = []
-StackLeft = []
+Stack = [[]] * 2
+# stack elements look like that:
+# [t, RL(t), (c1, Left(c1)), ...]
+# where t - checkpoint time
+#       RL(t) - reward until time t
+#       c1 - idx of modified column
+#       Left(c1) - previous Left-column
 
-BlockSSALeft = False
-BlockSSARight = False
+BlockSSA = [False] * 2
+
+# SSA Calls
+# https://people.idsia.ch/~juergen/mljssalevin/node2.html
+def SSA(left):
+  if not BlockSSA[left]:
+    BlockSSA[left] = True
+    while True:
+
+      # t is a new checkpoint
+      t = currTime
+
+      # backtracking
+
+      # trivial case
+      if len(Stack[left]) == 0:
+        Stack[left].append([t, RL(t)])
+        break
+      else:
+        # t' and t''
+        t1, RL(t1) = Stack[left][-1][0], Stack[left][-1][1]
+        if len(StackLeft) >= 2:
+          t2, RL(t2) = Stack[left][-2][0], Stack[left][-2][1]
+        else:
+          t2, RL_t2 = 0, 0
+
+        # main induct rule
+        if (RL(t) - RL(t1)) / (t - t1) > (RL(t) - RL(t2)) / (t - t2):
+          Stack[left].append([t, RL(t)])
+          break
+        else:
+          # pop t1 block, restore everything as it was before t1
+          lblock = Stack[left].pop()
+          modifs = lblock[2]
+          for modif in modifs:
+            # restore modif
+            Brain[modif[0]] = modif[1]
+
+
 
 # collective decision function
 def f(x, y):
@@ -87,17 +128,19 @@ class InsExec():
     ins_method(params, clean_params)
     
     
+insExec = InsExec()
 while True:
   # select instruction head a[j] with max? probability Q(IP, j)
   ins_idx = getDecision(InsPointer)
 
   # select arguments 
   num_params = tab_ins[ins_idx][1]
+  params = []
   for i in range(1, num_params + 1):
     param_idx = getDecision(InsPointer + i)
     params.append(param_idx)
   # execute the instruction
-  exec_ins(ins_idx, params)
+  insExec.exec_ins(ins_idx, params)
 
   # external reward?
   # inputs?
