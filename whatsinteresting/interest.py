@@ -4,7 +4,7 @@ import numpy as np
 n = 24
 
 # #(arguments) <= InsBlockSize - 3
-InsBlockSize = 2
+InsBlockSize = 9
 
 # m is a multiple of InsBlockSize
 m = InsBlockSize * (n * n // InsBlockSize)
@@ -47,9 +47,35 @@ tab_ins = [
   ["Mov", 4], ["Init", 4]
 ]
 
-class Ins():
+class InsExec():
   def ins_Jmpl(self, params, clean_params):
-    # yep...
+    assert len(clean_params) == 3
+    if State[clean_params[0]] < State[clean_params[1]]:
+      InsPointer = clean_params[2] - (clean_params[2] % InsBlockSize)
+  def ins_Jmpeq(self, params, clean_params):
+    assert len(clean_params) == 3
+    if State[clean_params[0]] == State[clean_params[1]]:
+      InsPointer = clean_params[2] - (clean_params[2] % InsBlockSize)
+  def ins_Add(self, params, clean_params):
+    assert len(clean_params) == 3
+    State[clean_params[2]] = (State[clean_params[0]] + State[clean_params[1]]) % M
+  def ins_Sub(self, params, clean_params):
+    assert len(clean_params) == 3
+    State[clean_params[2]] = (State[clean_params[0]] - State[clean_params[1]]) % M
+  def ins_Mul(self, params, clean_params):
+    assert len(clean_params) == 3
+    State[clean_params[2]] = (State[clean_params[0]] * State[clean_params[1]]) % M
+  def ins_Div(self, params, clean_params):
+    assert len(clean_params) == 3
+    if State[clean_params[1]] != 0:
+      State[clean_params[2]] = (State[clean_params[0]] // State[clean_params[1]]) % M
+  def ins_Mov(self, params, clean_params):
+    assert len(clean_params) == 2
+    State[clean_params[1]] = State[clean_params[0]]
+  def ins_Init(self, params, clean_params):
+    assert len(clean_params) == 2
+    State[clean_params[1]] = clean_params[0]
+
   def exec_ins(self, ins_idx, params):
     ins_name = 'ins_' + tab_ins[ins_idx][0]
     assert tab_ins[ins_idx][1] == len(params)
@@ -61,10 +87,6 @@ class Ins():
     ins_method(params, clean_params)
     
     
-
-
-
-
 while True:
   # select instruction head a[j] with max? probability Q(IP, j)
   ins_idx = getDecision(InsPointer)
@@ -77,3 +99,11 @@ while True:
   # execute the instruction
   exec_ins(ins_idx, params)
 
+  # external reward?
+  # inputs?
+  
+  if tab_ins[ins_idx][0] != "Jmpl" and tab_ins[ins_idx][0] != "Jmpeq":
+    w1 = getDecision(InsPointer + 7)
+    w2 = getDecision(InsPointer + 8)
+    w = (w1 * n + w2) % m
+    InsPointer = w - (w % InsBlockSize)
