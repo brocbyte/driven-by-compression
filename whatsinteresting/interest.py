@@ -76,7 +76,7 @@ def f(x, y):
   return x * y
 
 def Q(i, j):
-  return f(RightBr[i][j], LeftBr[i][j]) / sum(f(x, y) for (x, y) in zip(RightBr[i], LeftBr[i]))
+  return f(Brain[1][i][j], Brain[0][i][j]) / sum(f(x, y) for (x, y) in zip(Brain[1][i], Brain[0][i]))
 
 def getDecision(i):
   return np.argmax([Q(i, j) for j in range(0, n)])
@@ -85,7 +85,9 @@ tab_ins = [
   # instructions operating on internal state only
   ["Jmpl", 6], ["Jmpeq", 6],
   ["Add", 6], ["Sub", 6], ["Mul", 6], ["Div", 6],
-  ["Mov", 4], ["Init", 4]
+  ["Mov", 4], ["Init", 4],
+  # bet!
+  ["Bet", 4]
 ]
 
 class InsExec():
@@ -117,6 +119,20 @@ class InsExec():
     assert len(clean_params) == 2
     State[clean_params[1]] = clean_params[0]
 
+  def ins_Bet(self, params, clean_params):
+    assert len(params) == 6
+    # c = d
+    if params[4] == params[5]:
+      return
+    if State[clean_params[1]] == State[clean_params[0]]:
+      # give reward c to Left and -c to Right
+    else:
+      # give reward -c to Left and c to Right
+    # surprise rewards become visible in the form of inputs
+    State[7] = c
+
+
+
   def exec_ins(self, ins_idx, params):
     ins_name = 'ins_' + tab_ins[ins_idx][0]
     assert tab_ins[ins_idx][1] == len(params)
@@ -136,9 +152,22 @@ while True:
   # select arguments 
   num_params = tab_ins[ins_idx][1]
   params = []
+
   for i in range(1, num_params + 1):
-    param_idx = getDecision(InsPointer + i)
-    params.append(param_idx)
+    param = getDecision(InsPointer + i)
+    params.append(param)
+
+  if tab_ins[ins_idx][0] == "Bet":
+    c = np.argmax(([Brain[0][InsPointer + 5][j] / sum(Brain[0][InsPointer + 5])) for j in range(0, n)])
+    c = 1 if c > (n / 2) else -1
+    params.append(c)
+
+    d = np.argmax(([Brain[1][InsPointer + 5][j] / sum(Brain[1][InsPointer + 5])) for j in range(0, n)])
+    d = 1 if d > (n / 2) else -1
+    params.append(d)
+
+   
+
   # execute the instruction
   insExec.exec_ins(ins_idx, params)
 
