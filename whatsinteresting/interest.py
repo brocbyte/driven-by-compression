@@ -20,6 +20,13 @@ InsSet = [i for i in range(0, n)]
 # brains
 Brain = [m * [[(1 / n)] * n]] * 2
 
+# environ reward
+ExternalReward = 0
+
+# curiosity reward
+from collections import defaultdict
+InternalReward = [defaultdict(lambda: 0)] * 2
+
 # InstructionPointer
 InsPointer = 0
 
@@ -35,9 +42,9 @@ BlockSSA = [False] * 2
 
 # SSA Calls
 # https://people.idsia.ch/~juergen/mljssalevin/node2.html
-def SSA(left):
-  if not BlockSSA[left]:
-    BlockSSA[left] = True
+def SSA(right):
+  if not BlockSSA[right]:
+    BlockSSA[right] = True
     while True:
 
       # t is a new checkpoint
@@ -46,24 +53,24 @@ def SSA(left):
       # backtracking
 
       # trivial case
-      if len(Stack[left]) == 0:
-        Stack[left].append([t, RL(t)])
+      if len(Stack[right]) == 0:
+        Stack[right].append([t, InternalReward[right][t]])
         break
       else:
         # t' and t''
-        t1, RL(t1) = Stack[left][-1][0], Stack[left][-1][1]
+        t1, InternalReward[right][t1] = Stack[right][-1][0], Stack[right][-1][1]
         if len(StackLeft) >= 2:
-          t2, RL(t2) = Stack[left][-2][0], Stack[left][-2][1]
+          t2, InternalReward[right][t2] = Stack[right][-2][0], Stack[right][-2][1]
         else:
-          t2, RL_t2 = 0, 0
+          t2, InternalReward[right][t2] = 0, 0
 
         # main induct rule
-        if (RL(t) - RL(t1)) / (t - t1) > (RL(t) - RL(t2)) / (t - t2):
-          Stack[left].append([t, RL(t)])
+        if (InternalReward[right][t] - InternalReward[right][t1]) / (t - t1) > (InternalReward[right][t] - InternalReward[right][t2])) / (t - t2):
+          Stack[right].append([t, InternalReward[right][t]])
           break
         else:
           # pop t1 block, restore everything as it was before t1
-          lblock = Stack[left].pop()
+          lblock = Stack[right].pop()
           modifs = lblock[2]
           for modif in modifs:
             # restore modif
@@ -87,8 +94,14 @@ tab_ins = [
   ["Add", 6], ["Sub", 6], ["Mul", 6], ["Div", 6],
   ["Mov", 4], ["Init", 4],
   # bet!
-  ["Bet", 4]
-]
+  ["Bet", 4],
+  # introspective instructions
+  ["GetLeft", 3], ["GetRight", 3],
+  # SSA-enabling
+  ["EnableSSALeft", 1], ["EnableSSARight", 1],
+  # primitive learning algorithms
+  ["IncProbLeft", 3]
+
 
 class InsExec():
   def ins_Jmpl(self, params, clean_params):
@@ -130,7 +143,25 @@ class InsExec():
       # give reward -c to Left and c to Right
     # surprise rewards become visible in the form of inputs
     State[7] = c
-
+  def ins_GetLeft(self, params, clean_params):
+    assert len(params) == 3 and len(clean_params) == 1
+    State[clean_params[0]] = math.round(M * Brain[0][clean_params[0]][params[2]]
+  def ins_GetRight(self, params, clean_params):
+    assert len(params) == 3 and len(clean_params) == 1
+    State[clean_params[0]] = math.round(M * Brain[1][clean_params[0]][params[2]]
+  def ins_EnableSSALeft(self, params, clean_params):
+    assert len(params) == 1 and len(clean_params) == 0
+    if params[0] < 10:
+      BlockSSALeft = False
+  def ins_EnableSSARight(self, params, clean_params):
+    assert len(params) == 1 and len(clean_params) == 0
+    if params[0] < 10:
+      BlockSSARight = False
+  def ins_IncPropLeft(self, params, clean_params):
+    assert len(params) == 3 and len(clean_params) == 1
+    SSA(right = False)
+    if len(Stack[0]) > 0 and Stack[0][-1].get(clean_params[0], default = None) != None:
+      # я устал
 
 
   def exec_ins(self, ins_idx, params):
@@ -171,8 +202,11 @@ while True:
   # execute the instruction
   insExec.exec_ins(ins_idx, params)
 
-  # external reward?
-  # inputs?
+  # external reward
+  if ExternalReward != 0:
+    State[8] = ExternalReward
+
+  # if an input has changed S0-S8, then shift S0-S80 to S9-S89
   
   if tab_ins[ins_idx][0] != "Jmpl" and tab_ins[ins_idx][0] != "Jmpeq":
     w1 = getDecision(InsPointer + 7)
