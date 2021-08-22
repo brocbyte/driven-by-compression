@@ -3,14 +3,13 @@ import numpy as np
 from collections import defaultdict
 
 class Agent():
+  n = 24
+  InsBlockSize = 9
+  m = InsBlockSize * (n * n // InsBlockSize)
+  M = 100000
   def __init__(self):
-    n = 24
-    InsBlockSize = 9
-    m = InsBlockSize * (n * n // InsBlockSize)
-    M = 100000
-
-    self.State = [0] * m
-    self.Brain = [m * [[(1 / n)] * n]] * 2
+    self.State = [0] * Agent.m
+    self.Brain = [Agent.m * [[(1 / Agent.n)] * Agent.n]] * 2
     self.ExternalReward = 0
     self.InternalReward = [defaultdict(lambda: 0)] * 2
     self.InsPointer = 0
@@ -59,15 +58,6 @@ class Agent():
             for modif in modifs:
               # restore modif
               self.Brain[modif[0]] = modif[1]
-
-  def Q(i, j):
-    def f(x, y):
-      return x * y
-    return f(self.Brain[1][i][j], self.Brain[0][i][j]) / sum(f(x, y) for (x, y) in zip(self.Brain[1][i], self.Brain[0][i]))
-
-  def getDecision(i):
-    return np.argmax([Q(i, j) for j in range(0, n)])
-
   def ins_Jmpl(self, params, clean_params):
     assert len(clean_params) == 3
     if self.State[clean_params[0]] < self.State[clean_params[1]]:
@@ -184,41 +174,47 @@ class Agent():
     self.State[2] = params[0] / n * 100
     updateInputs()
 
+  tab_ins = [
+      ["Jmpl", 6], ["Jmpeq", 6],
+      ["Add", 6], ["Sub", 6], ["Mul", 6], ["Div", 6],
+      ["Mov", 4], ["Init", 4],
+      ["Bet", 4],
+      ["GetLeft", 3], ["GetRight", 3],
+      ["EnableSSALeft", 1], ["EnableSSARight", 1],
+      ["IncProbLeft", 3],
+      ["MoveAgent", 0], ["SetDirection", 1]
+  ]
           
 
   def exec_ins(self, ins_idx, params):
-    ins_name = 'ins_' + tab_ins[ins_idx][0]
-    assert tab_ins[ins_idx][1] == len(params)
+    ins_name = 'ins_' + Agent.tab_ins[ins_idx][0]
+    assert Agent.tab_ins[ins_idx][1] == len(params)
     ins_method = getattr(self, ins_name)
     clean_params = []
     for i in range(0, len(params), 2):
       assert i + 1 < len(params) 
-      clean_params.append((params[i] * n + params[i+1]) % m)
+      clean_params.append((params[i] * Agent.n + params[i+1]) % Agent.m)
     ins_method(params, clean_params)
 
-  def act(self):
-    tab_ins = [
-        ["Jmpl", 6], ["Jmpeq", 6],
-        ["Add", 6], ["Sub", 6], ["Mul", 6], ["Div", 6],
-        ["Mov", 4], ["Init", 4],
-        ["Bet", 4],
-        ["GetLeft", 3], ["GetRight", 3],
-        ["EnableSSALeft", 1], ["EnableSSARight", 1],
-        ["IncProbLeft", 3],
-        ["MoveAgent", 0], ["SetDirection", 1]
-    ]
+  def getDecision(self, i):
+    def f(x, y):
+      return x * y
+    def Q(i, j):
+      return f(self.Brain[1][i][j], self.Brain[0][i][j]) / sum(f(x, y) for (x, y) in zip(self.Brain[1][i], self.Brain[0][i]))
+    return np.argmax([Q(i, j) for j in range(0, Agent.n)])
 
+  def act(self):
     # select instruction head a[j] with max? probability Q(IP, j)
-    ins_idx = getDecision(self.InsPointer)
+    ins_idx = self.getDecision(self.InsPointer)
 
     # select arguments 
     params = []
-    for i in range(1, tab_ins[ins_idx][1] + 1):
-      param = getDecision(self.InsPointer + i)
+    for i in range(1, Agent.tab_ins[ins_idx][1] + 1):
+      param = self.getDecision(self.InsPointer + i)
       params.append(param)
 
     # take care of Bet!
-    if tab_ins[ins_idx][0] == "Bet":
+    if Agent.tab_ins[ins_idx][0] == "Bet":
       c = np.argmax([(self.Brain[0][self.InsPointer + 5][j] / sum(self.Brain[0][self.InsPointer + 5])) for j in range(0, n)])
       c = 1 if c > (n / 2) else -1
       params.append(c)
@@ -228,7 +224,8 @@ class Agent():
       params.append(d)
 
      
-    exec_ins(ins_idx, params)
+    self.exec_ins(ins_idx, params)
+    print(params)
 
     # external reward
     if self.ExternalReward != 0:
@@ -236,8 +233,8 @@ class Agent():
 
     # TODO if an input has changed S0-S8, then shift S0-S80 to S9-S89
     
-    if tab_ins[ins_idx][0] != "Jmpl" and tab_ins[ins_idx][0] != "Jmpeq":
-      w1 = getDecision(self.InsPointer + 7)
-      w2 = getDecision(self.InsPointer + 8)
+    if Agent.tab_ins[ins_idx][0] != "Jmpl" and Agent.tab_ins[ins_idx][0] != "Jmpeq":
+      w1 = self.getDecision(self.InsPointer + 7)
+      w2 = self.getDecision(self.InsPointer + 8)
       w = (w1 * n + w2) % m
       self.InsPointer = w - (w % InsBlockSize)
