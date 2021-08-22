@@ -65,7 +65,7 @@ def SSA(right):
           t2, InternalReward[right][t2] = 0, 0
 
         # main induct rule
-        if (InternalReward[right][t] - InternalReward[right][t1]) / (t - t1) > (InternalReward[right][t] - InternalReward[right][t2])) / (t - t2):
+        if (InternalReward[right][t] - InternalReward[right][t1]) / (t - t1) > (InternalReward[right][t] - InternalReward[right][t2]) / (t - t2):
           Stack[right].append([t, InternalReward[right][t]])
           break
         else:
@@ -100,7 +100,10 @@ tab_ins = [
   # SSA-enabling
   ["EnableSSALeft", 1], ["EnableSSARight", 1],
   # primitive learning algorithms
-  ["IncProbLeft", 3]
+  ["IncProbLeft", 3],
+  # interaction with the environment
+  ["MoveAgent", 0], ["SetDirection", 1]
+]
 
 
 class InsExec():
@@ -139,16 +142,20 @@ class InsExec():
       return
     if State[clean_params[1]] == State[clean_params[0]]:
       # give reward c to Left and -c to Right
+      InternalReward[0] += c
+      InternalReward[1] -= c
     else:
       # give reward -c to Left and c to Right
+      InternalReward[0] -= c
+      InternalReward[1] += c
     # surprise rewards become visible in the form of inputs
     State[7] = c
   def ins_GetLeft(self, params, clean_params):
     assert len(params) == 3 and len(clean_params) == 1
-    State[clean_params[0]] = math.round(M * Brain[0][clean_params[0]][params[2]]
+    State[clean_params[0]] = math.round(M * Brain[0][clean_params[0]][params[2]])
   def ins_GetRight(self, params, clean_params):
     assert len(params) == 3 and len(clean_params) == 1
-    State[clean_params[0]] = math.round(M * Brain[1][clean_params[0]][params[2]]
+    State[clean_params[0]] = math.round(M * Brain[1][clean_params[0]][params[2]])
   def ins_EnableSSALeft(self, params, clean_params):
     assert len(params) == 1 and len(clean_params) == 0
     if params[0] < 10:
@@ -157,12 +164,66 @@ class InsExec():
     assert len(params) == 1 and len(clean_params) == 0
     if params[0] < 10:
       BlockSSARight = False
-  def ins_IncPropLeft(self, params, clean_params):
-    assert len(params) == 3 and len(clean_params) == 1
-    SSA(right = False)
-    if len(Stack[0]) > 0 and Stack[0][-1].get(clean_params[0], default = None) != None:
-      # я устал
 
+  lambda_const = 0.3
+  MinProb = 0.004
+  def saveBrainCol(self, right, column):
+    if Stack[right][-1][2].get(column, default = None) != None:
+      Stack[right][-1][2][column] = Brain[0][column].copy()
+    
+
+  def ins_IncPropLeft(self, params, clean_params):
+    SSA(right = False)
+    assert len(params) == 3 and len(clean_params) == 1 and len(Stack[0]) > 0
+    saveBrainCol(right = False, column = clean_params[0])
+
+    for k in range(0, len(Brain[0][clean_params[0]])):
+      if k == params[2]:
+        Brain[0][clean_params[0]][k] = 1 - lambda_const * (1 - Brain[0][clean_params[0]][k])
+      else:
+        Brain[0][clean_params[0]][k] *= lambda_const
+
+    # we've saved it already
+    if any(elem < MinProb for elem in Brain[0][clean_params[0]]):
+      Brain[0][clean_params[0]] = Stack[0][-1][2][clean_params[0]]
+
+  def ccw(A,B,C):
+      return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+  def intersect(AB, CD):
+      [A, B] = AB
+      [C, D] = CD
+      return ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D)
+  def updateInputs():
+    x, y, d = State[0], State[1], State[2] / 100 * (2 * math.pi)
+    front_v = [[x, y], [24 * (x + cos(d)), 24 * (y + sin(d))]]
+    State[3] = 24 if any(intersect(wall, front_v) for wall in walls) else 0
+
+    right_v  = [[x, y], [24 * (x + cos(d - math.pi / 2)), 24 * (y + sin(d - math.pi / 2))]]
+    State[4] = 24 if any(intersect(wall, right_v) for wall in walls) else 0
+
+    back_v = [[x, y], [-24 * (x + cos(d)), -24 * (y + sin(d))]]
+    State[5] = 24 if any(intersect(wall, back_v) for wall in walls) else 0
+
+    left_v  = [[x, y], [24 * (x + cos(d + math.pi / 2)), 24 * (y + sin(d + math.pi / 2))]]
+    State[6] = 24 if any(intersect(wall, left_v) for wall in walls) else 0
+
+
+
+  from math import sin, cos
+  import math
+  def ins_MoveAgent(self, params, clean_params):
+    Vel = 12
+    assert len(params) == 0 and len(clean_params) == 0
+    x, y, d = State[0], State[1], State[2] / 100 * (2 * math.pi)
+    move = [[x, y], [Vel * (x + cos(d)), Vel * (y + sin(d))]]
+    if not any(intersect(wall, move) for wall in walls):
+      State[0], State[1] = int(move[1][0]), int(move[1][1])
+    updateInputs()
+  def ins_SetDirection(self, params, clean_params):
+    State[2] = params[0] / n * 100
+    updateInputs()
+
+          
 
   def exec_ins(self, ins_idx, params):
     ins_name = 'ins_' + tab_ins[ins_idx][0]
@@ -174,6 +235,29 @@ class InsExec():
       clean_params.append((params[i] * n + params[i+1]) % m)
     ins_method(params, clean_params)
     
+
+
+import tkinter as tk
+root = tk.Tk()
+delta_t = 20
+size = 1000
+canvas = tk.Canvas(root, width = size, height = size)
+canvas.pack()
+
+x, y = 0, 0
+dot = canvas.create_oval(x,y,x+20,y+20,outline="white",fill="green") 
+
+def redraw():
+  canvas.after(delta_t,redraw)
+  canvas.move(dot, dx, dy)
+  canvas.update()
+
+canvas.after(delta_t, redraw)
+root.mainloop()
+
+
+
+
     
 insExec = InsExec()
 while True:
@@ -189,11 +273,11 @@ while True:
     params.append(param)
 
   if tab_ins[ins_idx][0] == "Bet":
-    c = np.argmax(([Brain[0][InsPointer + 5][j] / sum(Brain[0][InsPointer + 5])) for j in range(0, n)])
+    c = np.argmax([(Brain[0][InsPointer + 5][j] / sum(Brain[0][InsPointer + 5])) for j in range(0, n)])
     c = 1 if c > (n / 2) else -1
     params.append(c)
 
-    d = np.argmax(([Brain[1][InsPointer + 5][j] / sum(Brain[1][InsPointer + 5])) for j in range(0, n)])
+    d = np.argmax([(Brain[1][InsPointer + 5][j] / sum(Brain[1][InsPointer + 5])) for j in range(0, n)])
     d = 1 if d > (n / 2) else -1
     params.append(d)
 
