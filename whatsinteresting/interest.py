@@ -2,6 +2,7 @@
 import numpy as np
 import math
 from collections import defaultdict
+from intersect import intersect
 
 class Agent():
   n = 24
@@ -143,12 +144,6 @@ class Agent():
     if any(elem < Agent.MinProb for elem in self.Brain[0][clean_params[0]]):
       self.Brain[0][clean_params[0]] = self.Stack[0][-1][2][clean_params[0]].copy()
 
-  def ccw(A,B,C):
-      return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
-  def intersect(AB, CD):
-      [A, B] = AB
-      [C, D] = CD
-      return ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D)
 
   def updateInputs(self):
     x, y, d = self.State[0], self.State[1], self.State[2] / 100 * (2 * math.pi)
@@ -167,7 +162,7 @@ class Agent():
 
 
   def ins_MoveAgent(self, params, clean_params):
-    Vel = 12
+    Vel = 3 
     x, y, d = self.State[0], self.State[1], self.State[2] / 100 * (2 * math.pi)
     move = [[x, y], [x + Vel * math.cos(d), y + Vel * math.sin(d)]]
     assert abs((move[1][0] - x) ** 2 + (move[1][1] - y) ** 2 - Vel ** 2) < 1e-6
@@ -212,13 +207,13 @@ class Agent():
     # select instruction head a[j] with max? probability Q(IP, j)
     import random
     ins_idx = self.getDecision(self.InsPtr)
-    ins_idx = random.randrange(0, len(Agent.tab_ins))
+    ins_idx = random.randint(0, len(Agent.tab_ins)-1)
 
     # select arguments 
     params = []
     for i in range(1, Agent.tab_ins[ins_idx][1] + 1):
       param = self.getDecision(self.InsPtr + i)
-      param = random.randrange(0, len(Agent.tab_ins))
+      param = random.randint(0, len(Agent.tab_ins)-1)
       params.append(param)
     print("exec %s with args %s" % (Agent.tab_ins[ins_idx], params))
 
