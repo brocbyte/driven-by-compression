@@ -65,7 +65,7 @@ class Agent():
             modifs = lblock[2]
             for k, v in modifs.items():
               # restore modif
-              self.Brain[right][k] = v
+              self.Brain[right][k] = v.copy()
       self.time += 1
       assert len(self.Stack[right]) > 0
 
@@ -144,6 +144,7 @@ class Agent():
     # we've saved it already
     if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
       self.Brain[right][x] = self.Stack[right][-1][2][x].copy()
+    assert all(elem >= Agent.MinProb for elem in self.Brain[right][x])
 
   def DecProb(self, right, params, clean_params):
     self.SSA(right)
@@ -158,6 +159,7 @@ class Agent():
         self.Brain[right][x][k] *= Agent.lambda_const
     if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
       self.Brain[right][x] = self.Stack[right][-1][2][x].copy()
+    assert all(elem >= Agent.MinProb for elem in self.Brain[right][x])
 
   def MoveDist(self, right, params, clean_params):
     self.SSA(right)
@@ -167,6 +169,7 @@ class Agent():
       self.Brain[right][x][k] = self.Brain[right][y][k]
     if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
       self.Brain[right][x] = self.Stack[right][-1][2][x].copy()
+    assert all(elem >= Agent.MinProb for elem in self.Brain[right][x])
 
   def ins_IncProbLeft(self, params, clean_params):
     self.IncProb(False, params, clean_params)
@@ -257,10 +260,16 @@ class Agent():
     def f(x, y):
       return x * y
     def Q(i, j):
-      return f(self.Brain[1][i][j], self.Brain[0][i][j]) / sum(f(x, y) for (x, y) in zip(self.Brain[1][i], self.Brain[0][i]))
-    return np.argmax([Q(idx, j) for j in range(0, Agent.n)])
-
+      return f(self.Brain[0][i][j], self.Brain[1][i][j]) / sum(f(x, y) for (x, y) in zip(self.Brain[0][i], self.Brain[1][i]))
+    nums = list(range(0, Agent.n))
+    weights = [Q(idx, j) for j in nums]
+    arr = random.choices(nums, weights, k = 1000)
+    ans = arr[random.randint(0, 1000 - 1)]
+    from collections import Counter
+    print(Counter(weights))
+    return ans
   def act(self):
+    print("IP: %d" % self.InsPtr)
     # select instruction head a[j] with max? probability Q(IP, j)
     ins_idx = self.getDecision(self.InsPtr)
     # ins_idx = random.randint(0, len(Agent.tab_ins)-1)
@@ -271,7 +280,7 @@ class Agent():
       param = self.getDecision(self.InsPtr + i)
       # param = random.randint(0, len(Agent.tab_ins)-1)
       params.append(param)
-    print("exec %s with args %s" % (Agent.tab_ins[ins_idx], params))
+    print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
 
     # take care of Bet!
     if Agent.tab_ins[ins_idx][0] == "Bet":
@@ -282,7 +291,7 @@ class Agent():
       d = np.argmax([(self.Brain[1][self.InsPtr + 5][j] / sum(self.Brain[1][self.InsPtr + 5])) for j in range(0, Agent.n)])
       d = 1 if d > (Agent.n / 2) else -1
       params.append(d)
-
+    
      
     self.exec_ins(ins_idx, params)
 
@@ -297,3 +306,7 @@ class Agent():
       w2 = self.getDecision(self.InsPtr + 8)
       w = (w1 * Agent.n + w2) % Agent.m
       self.InsPtr = w - (w % Agent.InsBlockSize)
+
+    if any(any(elem < Agent.MinProb for elem in self.Brain[0][x]) for x in range(0, Agent.n)):
+      print("this is sick")
+      exit(0)
