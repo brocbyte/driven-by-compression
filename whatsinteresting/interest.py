@@ -3,6 +3,7 @@ import numpy as np
 import math
 from collections import defaultdict
 from intersect import intersect
+import random
 
 class Agent():
   n = 24
@@ -130,21 +131,75 @@ class Agent():
     if self.Stack[right][-1][2].get(column) == None:
       self.Stack[right][-1][2][column] = self.Brain[0][column].copy()
     
-  def ins_IncProbLeft(self, params, clean_params):
-    self.SSA(right = False)
-    self.saveBrainCol(right = False, column = clean_params[0])
-
-    for k in range(0, len(self.Brain[0][clean_params[0]])):
+  def IncProb(self, right, params, clean_params):
+    self.SSA(right)
+    x = clean_params[0]
+    self.saveBrainCol(right, x)
+    for k in range(0, len(self.Brain[right][x])):
       if k == params[2]:
-        self.Brain[0][clean_params[0]][k] = 1 - Agent.lambda_const * (1 - self.Brain[0][clean_params[0]][k])
+        self.Brain[right][x][k] = 1 - Agent.lambda_const * (1 - self.Brain[right][x][k])
       else:
-        self.Brain[0][clean_params[0]][k] *= Agent.lambda_const
+        self.Brain[right][x][k] *= Agent.lambda_const
 
     # we've saved it already
-    if any(elem < Agent.MinProb for elem in self.Brain[0][clean_params[0]]):
-      self.Brain[0][clean_params[0]] = self.Stack[0][-1][2][clean_params[0]].copy()
+    if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
+      self.Brain[right][x] = self.Stack[right][-1][2][x].copy()
 
+  def DecProb(self, right, params, clean_params):
+    self.SSA(right)
+    x = clean_params[0]
+    self.saveBrainCol(right, x)
+    for k in range(0, len(self.Brain[right][x])):
+      if k != params[2]:
+        self.Brain[right][x][k] = ((1 - Agent.lambda_const * self.Brain[right][x][k]) \
+                                  / (1 - self.Brain[right][x][k])) \
+                                  * self.Brain[right][x][k]
+      else:
+        self.Brain[right][x][k] *= Agent.lambda_const
+    if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
+      self.Brain[right][x] = self.Stack[right][-1][2][x].copy()
 
+  def MoveDist(self, right, params, clean_params):
+    self.SSA(right)
+    x, y = clean_params[0], clean_params[1]
+    self.saveBrainCol(right, x)
+    for k in range(0, len(self.Brain[right][x])):
+      self.Brain[right][x][k] = self.Brain[right][y][k]
+    if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
+      self.Brain[right][x] = self.Stack[right][-1][2][x].copy()
+
+  def ins_IncProbLeft(self, params, clean_params):
+    self.IncProb(False, params, clean_params)
+  def ins_IncProbRight(self, params, clean_params):
+    self.IncProb(True, params, clean_params)
+
+  def ins_DecProbLeft(self, params, clean_params):
+    self.DecProb(False, params, clean_params)
+  def ins_DecProbRight(self, params, clean_params):
+    self.DecProb(True, params, clean_params)
+
+  def ins_MoveDistLeft(self, params, clean_params):
+    self.MoveDist(False, params, clean_params)
+  def ins_MoveDistRight(self, params, clean_params):
+    self.MoveDist(True, params, clean_params)
+
+  def ins_IncProbBoth(self, params, clean_params):
+    if random.randint(0, 1):
+      self.ins_IncProbLeft(params, clean_params)
+      self.ins_IncProbRight(params, clean_params)
+    else:
+      self.ins_IncProbRight(params, clean_params)
+      self.ins_IncProbLeft(params, clean_params)
+  def ins_DecProbBoth(self, params, clean_params):
+    if random.randint(0, 1):
+      self.ins_DecProbLeft(params, clean_params)
+      self.ins_DecProbRight(params, clean_params)
+    else:
+      self.ins_DecProbRight(params, clean_params)
+      self.ins_DecProbLeft(params, clean_params)
+  def ins_SSAandCopy(self, params, clean_params):
+    pass
+  
   def updateInputs(self):
     x, y, d = self.State[0], self.State[1], self.State[2] / 100 * (2 * math.pi)
     front_v = [[x, y], [24 * (x + math.cos(d)), 24 * (y + math.sin(d))]]
@@ -180,7 +235,9 @@ class Agent():
       ["Bet", 4],
       ["GetLeft", 3], ["GetRight", 3],
       ["EnableSSALeft", 1], ["EnableSSARight", 1],
-      ["IncProbLeft", 3],
+      ["IncProbLeft", 3], ["DecProbLeft", 3], ["MoveDistLeft", 4],
+      ["IncProbRight", 3], ["DecProbRight", 3], ["MoveDistRight", 4],
+      ["IncProbBoth", 3], ["DecProbBoth", 3], ["SSAandCopy", 1],
       ["MoveAgent", 0], ["SetDirection", 1]
   ]
           
@@ -205,15 +262,14 @@ class Agent():
 
   def act(self):
     # select instruction head a[j] with max? probability Q(IP, j)
-    import random
     ins_idx = self.getDecision(self.InsPtr)
-    ins_idx = random.randint(0, len(Agent.tab_ins)-1)
+    # ins_idx = random.randint(0, len(Agent.tab_ins)-1)
 
     # select arguments 
     params = []
     for i in range(1, Agent.tab_ins[ins_idx][1] + 1):
       param = self.getDecision(self.InsPtr + i)
-      param = random.randint(0, len(Agent.tab_ins)-1)
+      # param = random.randint(0, len(Agent.tab_ins)-1)
       params.append(param)
     print("exec %s with args %s" % (Agent.tab_ins[ins_idx], params))
 
