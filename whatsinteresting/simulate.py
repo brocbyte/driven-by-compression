@@ -22,9 +22,17 @@ canvas.pack()
 dot_size = 8 
 x, y = agent.State[0], agent.State[1]
 dot = canvas.create_oval(x, y, x + dot_size, y + dot_size, outline="white", fill="green") 
+ts = 0
 
 def redraw():
   global x, y
+  global ts
+  ts += 1
+  if ts % 100 == 0:
+    print("# " + str(ts))
+    print("SL: %d, SR: %d" % (len(agent.Stack[0]), len(agent.Stack[1])))
+    print("RL: %d, RR: %d" % (agent.IR[0], agent.IR[1]))
+
   # print("(%d ; %d)" % (x, y))
   canvas.after(delta_t,redraw)
   agent.act()
@@ -33,6 +41,14 @@ def redraw():
   canvas.move(dot, nx - x, ny - y)
   x, y = nx, ny
   canvas.update()
+ 
+'''
+steps = int(1e6)
+for i in range(0, steps):
+  agent.act()
+
+print("%d steps passed!" % steps)
+'''
 
 canvas.after(delta_t, redraw)
 root.mainloop()

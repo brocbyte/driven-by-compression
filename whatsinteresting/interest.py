@@ -15,7 +15,8 @@ class Agent():
     self.State[0], self.State[1] = 500, 500
     self.Brain = [[[(1 / Agent.n)] * Agent.n] * Agent.m] * 2
     self.ER = 0
-    self.IR = [defaultdict(int)] * 2
+    # we should maintain RL(t), RR(t) - current time, and RLs, RRs on Stacks
+    self.IR = [0] * 2
     self.InsPtr = 0
     self.Stack = [[]] * 2
     self.walls = walls
@@ -43,24 +44,21 @@ class Agent():
 
         # trivial case
         if len(self.Stack[right]) == 0:
-          print("push t: %d, r: %d" % (t, self.IR[right][t]))
-          self.Stack[right].append([t, self.IR[right][t], dict()])
+          self.Stack[right].append([t, self.IR[right], dict()])
           break
         else:
           # t' and t''
-          t1 = self.Stack[right][-1][0]
-          assert self.IR[right][t1] == self.Stack[right][-1][1] 
+          t1, IRt1 = self.Stack[right][-1][0], self.Stack[right][-1][1]
           if len(self.Stack[right]) >= 2:
-            t2 = self.Stack[right][-2][0]
-            assert self.IR[right][t2] == self.Stack[right][-2][1] 
+            t2, IRt2 = self.Stack[right][-2][0], self.Stack[right][-2][1]
           else:
-            t2 = 0
+            t2, IRt2 = 0, 0
 
           # main induct rule
           assert t != t2
           assert t != t1
-          if (self.IR[right][t] - self.IR[right][t1]) / (t - t1) > (self.IR[right][t] - self.IR[right][t2]) / (t - t2):
-            self.Stack[right].append([t, self.IR[right][t], dict()])
+          if (self.IR[right] - IRt1) / (t - t1) > (self.IR[right] - IRt2) / (t - t2):
+            self.Stack[right].append([t, self.IR[right], dict()])
             break
           else:
             # pop t1 block, restore everything as it was before t1
@@ -106,13 +104,13 @@ class Agent():
     c, d = params[4], params[5]
     if c == d:
       return
-
+  
     if self.State[clean_params[1]] == self.State[clean_params[0]]:
-      self.IR[0][self.time] += c
-      self.IR[1][self.time] -= c
+      self.IR[0] += c
+      self.IR[1] -= c
     else:
-      self.IR[0][self.time] -= c
-      self.IR[1][self.time] += c
+      self.IR[0] -= c
+      self.IR[1] += c
     # surprise rewards become visible in the form of inputs
     self.State[7] = c
 
@@ -134,8 +132,7 @@ class Agent():
   MinProb = 0.004
   def saveBrainCol(self, right, column):
     assert len(self.Stack[right]) > 0
-    if self.Stack[right][-1][2].get(column) == None:
-      print("saving %d col" % len(self.Stack[right][-1][2]))
+    if column not in self.Stack[right][-1][2]:
       self.Stack[right][-1][2][column] = self.Brain[0][column].copy()
     
   def IncProb(self, right, params, clean_params):
@@ -226,12 +223,16 @@ class Agent():
     t = self.time
     tl = self.Stack[0][-1][0] if len(self.Stack[0]) > 0 else 0
     tr = self.Stack[1][-1][0] if len(self.Stack[1]) > 0 else 0
-    rl, rr = self.IR[0][tl], self.IR[1][tr]
-    loser = (rl - self.IR[0][t]) / (tl - t) > (rr - self.IR[1][t]) / (tr - t)
+
+    rl = self.Stack[0][-1][1] if len(self.Stack[0]) > 0 else 0
+    rr = self.Stack[0][-1][1] if len(self.Stack[0]) > 0 else 0
+    loser = (self.IR[0] - rl) / (tl - t) > (self.IR[1] - rr) / (tr - t)
     def diff(xs, ys):
-      return sum(abs(x - y) for x, y in zip(xs, ys)) > 0.2
+      return sum(abs(x - y) for x, y in zip(xs, ys)) != 0
     for x in range(0, Agent.m):
       if diff(self.Brain[0][x], self.Brain[1][x]):
+        print("SUCC")
+        exit(0)
         self.saveBrainCol(loser, x)
         for k in range(0, Agent.n):
           self.Brain[loser][x][k] = self.Brain[not loser][x][k]
@@ -260,16 +261,15 @@ class Agent():
     x, y, d = self.State[0], self.State[1], self.State[2] / 100 * (2 * math.pi)
     move = [[x, y], [x + Vel * math.cos(d), y + Vel * math.sin(d)]]
     assert abs((move[1][0] - x) ** 2 + (move[1][1] - y) ** 2 - Vel ** 2) < 1e-6
+    nx, ny = int(move[1][0]), int(move[1][1])
+    move[1][0] += 10 * math.cos(d)
+    move[1][1] += 10 * math.sin(d)
     if not any(intersect(wall, move) for wall in self.walls):
-      self.State[0], self.State[1] = int(move[1][0]), int(move[1][1])
+      self.State[0], self.State[1] = nx, ny
     self.updateInputs()
-    self.IR[0][self.time] += 1
-    self.IR[1][self.time] += 1
   def ins_SetDirection(self, params, clean_params):
     self.State[2] = params[0] / Agent.n * 100
     self.updateInputs()
-    self.IR[0][self.time] += 1
-    self.IR[1][self.time] += 1
 
   tab_ins = [
       ["Jmpl", 6], ["Jmpeq", 6],
@@ -306,20 +306,18 @@ class Agent():
     return random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
   def act(self):
     # print("IP: %d" % self.InsPtr)
-    print("L: %d" % len(self.Stack[0]))
-    print("R: %d\n" % len(self.Stack[1]))
+    # print("L: %d" % len(self.Stack[0]))
+    # print("R: %d\n" % len(self.Stack[1]))
     
     # select instruction head a[j] with max? probability Q(IP, j)
     ins_idx = self.getDecision(self.InsPtr)
-    # ins_idx = random.randint(0, len(Agent.tab_ins)-1)
 
     # select arguments 
     params = []
     for i in range(1, Agent.tab_ins[ins_idx][1] + 1):
       param = self.getDecision(self.InsPtr + i)
-      # param = random.randint(0, len(Agent.tab_ins)-1)
       params.append(param)
-    print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
+    # print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
 
     # take care of Bet!
     if Agent.tab_ins[ins_idx][0] == "Bet":
