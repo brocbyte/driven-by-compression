@@ -15,7 +15,7 @@ class Agent():
     self.State[0], self.State[1] = 500, 500
     self.Brain = [[[(1 / Agent.n)] * Agent.n] * Agent.m] * 2
     self.ER = 0
-    self.IR = [defaultdict(lambda: 0)] * 2
+    self.IR = [defaultdict(int)] * 2
     self.InsPtr = 0
     self.Stack = [[]] * 2
     self.walls = walls
@@ -61,11 +61,17 @@ class Agent():
             break
           else:
             # pop t1 block, restore everything as it was before t1
+            print("pop!")
+            print((self.IR[right][t] - self.IR[right][t1]) / (t - t1)) 
+            print((self.IR[right][t] - self.IR[right][t2]) / (t - t2))
+            print("...")
             lblock = self.Stack[right].pop()
             modifs = lblock[2]
             for k, v in modifs.items():
               # restore modif
-              self.Brain[right][k] = v.copy()
+              assert len(self.Brain[right][k]) == len(v)
+              for i in range(0, len(self.Brain[right][k])):
+                self.Brain[right][k][i] = v[i]
       self.time += 1
       assert len(self.Stack[right]) > 0
 
@@ -102,11 +108,11 @@ class Agent():
     if c == d:
       return
     if self.State[clean_params[1]] == self.State[clean_params[0]]:
-      self.IR[0] += c
-      self.IR[1] -= c
+      self.IR[0][self.time] += c
+      self.IR[1][self.time] -= c
     else:
-      self.IR[0] -= c
-      self.IR[1] += c
+      self.IR[0][self.time] -= c
+      self.IR[1][self.time] += c
     # surprise rewards become visible in the form of inputs
     self.State[7] = c
 
@@ -143,8 +149,10 @@ class Agent():
 
     # we've saved it already
     if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
-      self.Brain[right][x] = self.Stack[right][-1][2][x].copy()
-    assert all(elem >= Agent.MinProb for elem in self.Brain[right][x])
+      assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
+      for k in range(0, len(self.Brain[right][x])):
+        self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
+    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.n))
 
   def DecProb(self, right, params, clean_params):
     self.SSA(right)
@@ -158,8 +166,10 @@ class Agent():
       else:
         self.Brain[right][x][k] *= Agent.lambda_const
     if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
-      self.Brain[right][x] = self.Stack[right][-1][2][x].copy()
-    assert all(elem >= Agent.MinProb for elem in self.Brain[right][x])
+      assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
+      for k in range(0, len(self.Brain[right][x])):
+        self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
+    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.n))
 
   def MoveDist(self, right, params, clean_params):
     self.SSA(right)
@@ -168,8 +178,10 @@ class Agent():
     for k in range(0, len(self.Brain[right][x])):
       self.Brain[right][x][k] = self.Brain[right][y][k]
     if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
-      self.Brain[right][x] = self.Stack[right][-1][2][x].copy()
-    assert all(elem >= Agent.MinProb for elem in self.Brain[right][x])
+      assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
+      for k in range(0, len(self.Brain[right][x])):
+        self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
+    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.n))
 
   def ins_IncProbLeft(self, params, clean_params):
     self.IncProb(False, params, clean_params)
@@ -220,7 +232,7 @@ class Agent():
 
 
   def ins_MoveAgent(self, params, clean_params):
-    Vel = 3 
+    Vel = 5 
     x, y, d = self.State[0], self.State[1], self.State[2] / 100 * (2 * math.pi)
     move = [[x, y], [x + Vel * math.cos(d), y + Vel * math.sin(d)]]
     assert abs((move[1][0] - x) ** 2 + (move[1][1] - y) ** 2 - Vel ** 2) < 1e-6
@@ -263,13 +275,12 @@ class Agent():
       return f(self.Brain[0][i][j], self.Brain[1][i][j]) / sum(f(x, y) for (x, y) in zip(self.Brain[0][i], self.Brain[1][i]))
     nums = list(range(0, Agent.n))
     weights = [Q(idx, j) for j in nums]
-    arr = random.choices(nums, weights, k = 1000)
-    ans = arr[random.randint(0, 1000 - 1)]
-    from collections import Counter
-    print(Counter(weights))
-    return ans
+    return random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
   def act(self):
-    print("IP: %d" % self.InsPtr)
+    # print("IP: %d" % self.InsPtr)
+    print("L: %d" % len(self.Stack[0]))
+    print("R: %d\n" % len(self.Stack[1]))
+    
     # select instruction head a[j] with max? probability Q(IP, j)
     ins_idx = self.getDecision(self.InsPtr)
     # ins_idx = random.randint(0, len(Agent.tab_ins)-1)
@@ -280,15 +291,19 @@ class Agent():
       param = self.getDecision(self.InsPtr + i)
       # param = random.randint(0, len(Agent.tab_ins)-1)
       params.append(param)
-    print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
+    # print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
 
     # take care of Bet!
     if Agent.tab_ins[ins_idx][0] == "Bet":
-      c = np.argmax([(self.Brain[0][self.InsPtr + 5][j] / sum(self.Brain[0][self.InsPtr + 5])) for j in range(0, Agent.n)])
+      weights = [(self.Brain[0][self.InsPtr + 5][j] / sum(self.Brain[0][self.InsPtr + 5])) for j in range(0, Agent.n)]
+      nums = list(range(0, Agent.n))
+      c = random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
       c = 1 if c > (Agent.n / 2) else -1
       params.append(c)
 
-      d = np.argmax([(self.Brain[1][self.InsPtr + 5][j] / sum(self.Brain[1][self.InsPtr + 5])) for j in range(0, Agent.n)])
+      weights = [(self.Brain[1][self.InsPtr + 5][j] / sum(self.Brain[1][self.InsPtr + 5])) for j in range(0, Agent.n)]
+      nums = list(range(0, Agent.n))
+      d = random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
       d = 1 if d > (Agent.n / 2) else -1
       params.append(d)
     
@@ -306,7 +321,12 @@ class Agent():
       w2 = self.getDecision(self.InsPtr + 8)
       w = (w1 * Agent.n + w2) % Agent.m
       self.InsPtr = w - (w % Agent.InsBlockSize)
+    from collections import Counter
+    for x in range (0, Agent.n):
+      for elem in self.Brain[0][x]:
+        if elem < Agent.MinProb:
+          print(Counter(self.Brain[0][x]))
+          print("this is sick")
+          exit(0)
 
-    if any(any(elem < Agent.MinProb for elem in self.Brain[0][x]) for x in range(0, Agent.n)):
-      print("this is sick")
-      exit(0)
+    # if any(any(elem < Agent.MinProb for elem in self.Brain[0][x]) for x in range(0, Agent.n)):

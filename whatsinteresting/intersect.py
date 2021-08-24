@@ -21,10 +21,6 @@ def intersect(p12, p34):
   p2 = Point(p12[1][0], p12[1][1])
   p3 = Point(p34[0][0], p34[0][1])
   p4 = Point(p34[1][0], p34[1][1])
-  print(p1)
-  print(p2)
-  print(p3)
-  print(p4)
 
   d1 = direction(p3, p4, p1)
   d2 = direction(p3, p4, p2)

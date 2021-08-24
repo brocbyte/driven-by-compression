@@ -25,7 +25,7 @@ dot = canvas.create_oval(x, y, x + dot_size, y + dot_size, outline="white", fill
 
 def redraw():
   global x, y
-  print("(%d ; %d)" % (x, y))
+  # print("(%d ; %d)" % (x, y))
   canvas.after(delta_t,redraw)
   agent.act()
   nx, ny = agent.State[0], agent.State[1]
