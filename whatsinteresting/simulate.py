@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from interest import Agent
-lw = 400
-rw = 600
+lw = 100
+rw = 900
 walls = [
   [[lw, lw], [lw, rw]],
   [[lw, lw], [rw, lw]],
@@ -19,7 +19,7 @@ for wall in walls:
   canvas.create_line(wall[0][0], wall[0][1], wall[1][0], wall[1][1], dash=(4, 2))
 canvas.pack()
 
-dot_size = 3
+dot_size = 8 
 x, y = agent.State[0], agent.State[1]
 dot = canvas.create_oval(x, y, x + dot_size, y + dot_size, outline="white", fill="green") 
 

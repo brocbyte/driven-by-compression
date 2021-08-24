@@ -43,15 +43,18 @@ class Agent():
 
         # trivial case
         if len(self.Stack[right]) == 0:
+          print("push t: %d, r: %d" % (t, self.IR[right][t]))
           self.Stack[right].append([t, self.IR[right][t], dict()])
           break
         else:
           # t' and t''
-          t1, self.IR[right][t1] = self.Stack[right][-1][0], self.Stack[right][-1][1]
+          t1 = self.Stack[right][-1][0]
+          assert self.IR[right][t1] == self.Stack[right][-1][1] 
           if len(self.Stack[right]) >= 2:
-            t2, self.IR[right][t2] = self.Stack[right][-2][0], self.Stack[right][-2][1]
+            t2 = self.Stack[right][-2][0]
+            assert self.IR[right][t2] == self.Stack[right][-2][1] 
           else:
-            t2, self.IR[right][t2] = 0, 0
+            t2 = 0
 
           # main induct rule
           assert t != t2
@@ -61,10 +64,6 @@ class Agent():
             break
           else:
             # pop t1 block, restore everything as it was before t1
-            print("pop!")
-            print((self.IR[right][t] - self.IR[right][t1]) / (t - t1)) 
-            print((self.IR[right][t] - self.IR[right][t2]) / (t - t2))
-            print("...")
             lblock = self.Stack[right].pop()
             modifs = lblock[2]
             for k, v in modifs.items():
@@ -107,6 +106,7 @@ class Agent():
     c, d = params[4], params[5]
     if c == d:
       return
+
     if self.State[clean_params[1]] == self.State[clean_params[0]]:
       self.IR[0][self.time] += c
       self.IR[1][self.time] -= c
@@ -135,6 +135,7 @@ class Agent():
   def saveBrainCol(self, right, column):
     assert len(self.Stack[right]) > 0
     if self.Stack[right][-1][2].get(column) == None:
+      print("saving %d col" % len(self.Stack[right][-1][2]))
       self.Stack[right][-1][2][column] = self.Brain[0][column].copy()
     
   def IncProb(self, right, params, clean_params):
@@ -152,7 +153,7 @@ class Agent():
       assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
       for k in range(0, len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
-    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.n))
+    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.m))
 
   def DecProb(self, right, params, clean_params):
     self.SSA(right)
@@ -169,7 +170,7 @@ class Agent():
       assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
       for k in range(0, len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
-    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.n))
+    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.m))
 
   def MoveDist(self, right, params, clean_params):
     self.SSA(right)
@@ -181,7 +182,7 @@ class Agent():
       assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
       for k in range(0, len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
-    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.n))
+    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.m))
 
   def ins_IncProbLeft(self, params, clean_params):
     self.IncProb(False, params, clean_params)
@@ -213,7 +214,30 @@ class Agent():
       self.ins_DecProbRight(params, clean_params)
       self.ins_DecProbLeft(params, clean_params)
   def ins_SSAandCopy(self, params, clean_params):
-    pass
+    if params[0] >= 5:
+      return
+    self.BlockSSA[0], self.BlockSSA[1] = False, False
+    if random.randint(0, 1):
+      self.SSA(False)
+      self.SSA(True)
+    else:
+      self.SSA(True)
+      self.SSA(False)
+    t = self.time
+    tl = self.Stack[0][-1][0] if len(self.Stack[0]) > 0 else 0
+    tr = self.Stack[1][-1][0] if len(self.Stack[1]) > 0 else 0
+    rl, rr = self.IR[0][tl], self.IR[1][tr]
+    loser = (rl - self.IR[0][t]) / (tl - t) > (rr - self.IR[1][t]) / (tr - t)
+    def diff(xs, ys):
+      return sum(abs(x - y) for x, y in zip(xs, ys)) > 0.2
+    for x in range(0, Agent.m):
+      if diff(self.Brain[0][x], self.Brain[1][x]):
+        self.saveBrainCol(loser, x)
+        for k in range(0, Agent.n):
+          self.Brain[loser][x][k] = self.Brain[not loser][x][k]
+
+
+
   
   def updateInputs(self):
     x, y, d = self.State[0], self.State[1], self.State[2] / 100 * (2 * math.pi)
@@ -232,16 +256,20 @@ class Agent():
 
 
   def ins_MoveAgent(self, params, clean_params):
-    Vel = 5 
+    Vel = 10 
     x, y, d = self.State[0], self.State[1], self.State[2] / 100 * (2 * math.pi)
     move = [[x, y], [x + Vel * math.cos(d), y + Vel * math.sin(d)]]
     assert abs((move[1][0] - x) ** 2 + (move[1][1] - y) ** 2 - Vel ** 2) < 1e-6
     if not any(intersect(wall, move) for wall in self.walls):
       self.State[0], self.State[1] = int(move[1][0]), int(move[1][1])
     self.updateInputs()
+    self.IR[0][self.time] += 1
+    self.IR[1][self.time] += 1
   def ins_SetDirection(self, params, clean_params):
     self.State[2] = params[0] / Agent.n * 100
     self.updateInputs()
+    self.IR[0][self.time] += 1
+    self.IR[1][self.time] += 1
 
   tab_ins = [
       ["Jmpl", 6], ["Jmpeq", 6],
@@ -291,18 +319,17 @@ class Agent():
       param = self.getDecision(self.InsPtr + i)
       # param = random.randint(0, len(Agent.tab_ins)-1)
       params.append(param)
-    # print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
+    print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
 
     # take care of Bet!
     if Agent.tab_ins[ins_idx][0] == "Bet":
-      weights = [(self.Brain[0][self.InsPtr + 5][j] / sum(self.Brain[0][self.InsPtr + 5])) for j in range(0, Agent.n)]
       nums = list(range(0, Agent.n))
+      weights = [(self.Brain[0][self.InsPtr + 5][j] / sum(self.Brain[0][self.InsPtr + 5])) for j in nums]
       c = random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
       c = 1 if c > (Agent.n / 2) else -1
       params.append(c)
 
-      weights = [(self.Brain[1][self.InsPtr + 5][j] / sum(self.Brain[1][self.InsPtr + 5])) for j in range(0, Agent.n)]
-      nums = list(range(0, Agent.n))
+      weights = [(self.Brain[1][self.InsPtr + 5][j] / sum(self.Brain[1][self.InsPtr + 5])) for j in nums]
       d = random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
       d = 1 if d > (Agent.n / 2) else -1
       params.append(d)
@@ -321,12 +348,5 @@ class Agent():
       w2 = self.getDecision(self.InsPtr + 8)
       w = (w1 * Agent.n + w2) % Agent.m
       self.InsPtr = w - (w % Agent.InsBlockSize)
-    from collections import Counter
-    for x in range (0, Agent.n):
-      for elem in self.Brain[0][x]:
-        if elem < Agent.MinProb:
-          print(Counter(self.Brain[0][x]))
-          print("this is sick")
-          exit(0)
-
-    # if any(any(elem < Agent.MinProb for elem in self.Brain[0][x]) for x in range(0, Agent.n)):
+    assert all(all(elem >= Agent.MinProb for elem in self.Brain[0][x]) for x in range(0, Agent.m))
+    assert all(all(elem >= Agent.MinProb for elem in self.Brain[1][x]) for x in range(0, Agent.m))
