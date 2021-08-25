@@ -13,12 +13,21 @@ class Agent():
   def __init__(self, walls = []):
     self.State = [0] * Agent.m
     self.State[0], self.State[1] = 500, 500
-    self.Brain = [[[(1 / Agent.n)] * Agent.n] * Agent.m] * 2
+    self.Brain = []
+    for i in range(0, 2):
+      b = []
+      for j in range(0, Agent.m):
+        c = []
+        for k in range(0, Agent.n):
+          c.append(1 / Agent.n)
+        b.append(c)
+      self.Brain.append(b)
+
     self.ER = 0
     # we should maintain RL(t), RR(t) - current time, and RLs, RRs on Stacks
     self.IR = [0] * 2
     self.InsPtr = 0
-    self.Stack = [[]] * 2
+    self.Stack = [[], []]
     self.walls = walls
     self.time = 1
     # stack elements look like that:
@@ -130,11 +139,11 @@ class Agent():
       self.BlockSSA[1] = False
 
   lambda_const = 0.3
-  MinProb = 0.01
+  MinProb = 0.004
   def saveBrainCol(self, right, column):
     assert len(self.Stack[right]) > 0
     if column not in self.Stack[right][-1][2]:
-      self.Stack[right][-1][2][column] = self.Brain[0][column].copy()
+      self.Stack[right][-1][2][column] = self.Brain[right][column].copy()
     
   def IncProb(self, right, params, clean_params):
     self.SSA(right)
@@ -222,18 +231,14 @@ class Agent():
       self.SSA(True)
       self.SSA(False)
     t = self.time
-    tl = self.Stack[0][-1][0] if len(self.Stack[0]) > 0 else 0
-    tr = self.Stack[1][-1][0] if len(self.Stack[1]) > 0 else 0
+    [tl, rl] = self.Stack[0][-1][:2] if len(self.Stack[0]) > 0 else [0, 0]
+    [tr, rr] = self.Stack[1][-1][:2] if len(self.Stack[1]) > 0 else [0, 0]
 
-    rl = self.Stack[0][-1][1] if len(self.Stack[0]) > 0 else 0
-    rr = self.Stack[0][-1][1] if len(self.Stack[0]) > 0 else 0
     loser = (self.IR[0] - rl) / (tl - t) > (self.IR[1] - rr) / (tr - t)
     def diff(xs, ys):
       return sum(abs(x - y) for x, y in zip(xs, ys)) != 0
     for x in range(0, Agent.m):
       if diff(self.Brain[0][x], self.Brain[1][x]):
-        print("SUCC")
-        exit(0)
         self.saveBrainCol(loser, x)
         for k in range(0, Agent.n):
           self.Brain[loser][x][k] = self.Brain[not loser][x][k]
@@ -317,10 +322,10 @@ class Agent():
         if val[0] == anti:
           return i 
     def Q(i, j):
-      return f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) / sum(f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) for i in range(0, Agent.n))
+      return f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) / sum(f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) for j in range(0, Agent.n))
     nums = list(range(0, Agent.n))
     weights = [Q(idx, j) for j in nums]
-    return random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
+    return random.choices(nums, weights)[0]
   def act(self):
     
     # select instruction head a[j] with max? probability Q(IP, j)
@@ -340,13 +345,13 @@ class Agent():
     if Agent.tab_ins[ins_idx][0] == "Bet":
       nums = list(range(0, Agent.n))
       weights = [(self.Brain[0][self.InsPtr + 5][j] / sum(self.Brain[0][self.InsPtr + 5])) for j in nums]
-      c = random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
+      c = random.choices(nums, weights)[0]
       self.time += 1
       c = 1 if c > (Agent.n / 2) else -1
       params.append(c)
 
       weights = [(self.Brain[1][self.InsPtr + 5][j] / sum(self.Brain[1][self.InsPtr + 5])) for j in nums]
-      d = random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
+      d = random.choices(nums, weights)[0]
       self.time += 1
       d = 1 if d > (Agent.n / 2) else -1
       params.append(d)
