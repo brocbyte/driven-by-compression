@@ -29,6 +29,7 @@ class Agent():
     #       Left(c1) - previous Left-column
 
     self.BlockSSA = [False] * 2
+    self.InsStat = defaultdict(int)
 
   # SSA Calls
   # https://people.idsia.ch/~juergen/mljssalevin/node2.html
@@ -129,7 +130,7 @@ class Agent():
       self.BlockSSA[1] = False
 
   lambda_const = 0.3
-  MinProb = 0.004
+  MinProb = 0.01
   def saveBrainCol(self, right, column):
     assert len(self.Stack[right]) > 0
     if column not in self.Stack[right][-1][2]:
@@ -262,8 +263,8 @@ class Agent():
     move = [[x, y], [x + Vel * math.cos(d), y + Vel * math.sin(d)]]
     assert abs((move[1][0] - x) ** 2 + (move[1][1] - y) ** 2 - Vel ** 2) < 1e-6
     nx, ny = int(move[1][0]), int(move[1][1])
-    move[1][0] += 10 * math.cos(d)
-    move[1][1] += 10 * math.sin(d)
+    move[1][0] += 30 * math.cos(d)
+    move[1][1] += 30 * math.sin(d)
     if not any(intersect(wall, move) for wall in self.walls):
       self.State[0], self.State[1] = nx, ny
     self.updateInputs()
@@ -299,23 +300,39 @@ class Agent():
   def getDecision(self, idx):
     def f(x, y):
       return x * y
+    def g(idx):
+      d = dict()
+      d["GetLeft"] = "GetRight"
+      d["GetRight"] = "GetLeft"
+      d["EnableSSALeft"] = "EnableSSARight"
+      d["EnableSSARight"] = "EnableSSALeft"
+      d["IncProbLeft"] = "IncProbRight"
+      d["IncProbRight"] = "IncProbLeft"
+      d["DecProbLeft"] = "DecProbRight"
+      d["DecProbRight"] = "DecProbLeft"
+      d["MoveDistRight"] = "MoveDistLeft"
+      d["MoveDistLeft"] = "MoveDistRight"
+      anti = d.get(Agent.tab_ins[idx][0], Agent.tab_ins[idx][0])
+      for i, val in enumerate(Agent.tab_ins):
+        if val[0] == anti:
+          return i 
     def Q(i, j):
-      return f(self.Brain[0][i][j], self.Brain[1][i][j]) / sum(f(x, y) for (x, y) in zip(self.Brain[0][i], self.Brain[1][i]))
+      return f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) / sum(f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) for i in range(0, Agent.n))
     nums = list(range(0, Agent.n))
     weights = [Q(idx, j) for j in nums]
     return random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
   def act(self):
-    # print("IP: %d" % self.InsPtr)
-    # print("L: %d" % len(self.Stack[0]))
-    # print("R: %d\n" % len(self.Stack[1]))
     
     # select instruction head a[j] with max? probability Q(IP, j)
     ins_idx = self.getDecision(self.InsPtr)
+    self.time += 1
+    self.InsStat[Agent.tab_ins[ins_idx][0]] += 1
 
     # select arguments 
     params = []
     for i in range(1, Agent.tab_ins[ins_idx][1] + 1):
       param = self.getDecision(self.InsPtr + i)
+      self.time += 1
       params.append(param)
     # print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
 
@@ -324,11 +341,13 @@ class Agent():
       nums = list(range(0, Agent.n))
       weights = [(self.Brain[0][self.InsPtr + 5][j] / sum(self.Brain[0][self.InsPtr + 5])) for j in nums]
       c = random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
+      self.time += 1
       c = 1 if c > (Agent.n / 2) else -1
       params.append(c)
 
       weights = [(self.Brain[1][self.InsPtr + 5][j] / sum(self.Brain[1][self.InsPtr + 5])) for j in nums]
       d = random.choices(nums, weights, k = 1000)[random.randrange(0, 1000)]
+      self.time += 1
       d = 1 if d > (Agent.n / 2) else -1
       params.append(d)
     
@@ -344,6 +363,7 @@ class Agent():
     if Agent.tab_ins[ins_idx][0] != "Jmpl" and Agent.tab_ins[ins_idx][0] != "Jmpeq":
       w1 = self.getDecision(self.InsPtr + 7)
       w2 = self.getDecision(self.InsPtr + 8)
+      self.time += 2
       w = (w1 * Agent.n + w2) % Agent.m
       self.InsPtr = w - (w % Agent.InsBlockSize)
     assert all(all(elem >= Agent.MinProb for elem in self.Brain[0][x]) for x in range(0, Agent.m))
