@@ -54,23 +54,23 @@ class Agent():
 
         # trivial case
         if len(self.Stack[right]) == 0:
+          self.InsStat["append"] += 1
           self.Stack[right].append([t, self.IR[right], dict()])
           break
         else:
           # t' and t''
-          t1, IRt1 = self.Stack[right][-1][0], self.Stack[right][-1][1]
-          if len(self.Stack[right]) >= 2:
-            t2, IRt2 = self.Stack[right][-2][0], self.Stack[right][-2][1]
-          else:
-            t2, IRt2 = 0, 0
+          [t1, IRt1] = self.Stack[right][-1][:2]
+          [t2, IRt2] = self.Stack[right][-2][:2] if len(self.Stack[right]) >= 2 else [0, 0]
 
           # main induct rule
           assert t != t2
           assert t != t1
           if (self.IR[right] - IRt1) / (t - t1) > (self.IR[right] - IRt2) / (t - t2):
+            self.InsStat["append"] += 1
             self.Stack[right].append([t, self.IR[right], dict()])
             break
           else:
+            self.InsStat["pop"] += 1
             # pop t1 block, restore everything as it was before t1
             lblock = self.Stack[right].pop()
             modifs = lblock[2]
@@ -233,10 +233,13 @@ class Agent():
     t = self.time
     [tl, rl] = self.Stack[0][-1][:2] if len(self.Stack[0]) > 0 else [0, 0]
     [tr, rr] = self.Stack[1][-1][:2] if len(self.Stack[1]) > 0 else [0, 0]
-
-    loser = (self.IR[0] - rl) / (tl - t) > (self.IR[1] - rr) / (tr - t)
+    assert t > tl and t > tr
+    loser = (self.IR[0] - rl) / (t - tl) - (self.IR[1] - rr) / (t - tr)
+    if loser == 0:
+      return
+    loser = loser > 0
     def diff(xs, ys):
-      return sum(abs(x - y) for x, y in zip(xs, ys)) != 0
+      return sum(abs(x - y) for x, y in zip(xs, ys)) > 0.01
     for x in range(0, Agent.m):
       if diff(self.Brain[0][x], self.Brain[1][x]):
         self.saveBrainCol(loser, x)
@@ -302,7 +305,7 @@ class Agent():
     assert len(clean_params) == len(params) // 2
     ins_method(params, clean_params)
 
-  def getDecision(self, idx):
+  def getDecision(self, idx, ins = False):
     def f(x, y):
       return x * y
     def g(idx):
@@ -322,14 +325,16 @@ class Agent():
         if val[0] == anti:
           return i 
     def Q(i, j):
+      return f(self.Brain[0][i][j], self.Brain[1][i][j]) / sum(f(x, y) for (x,y) in zip(self.Brain[0][i], self.Brain[1][i]))
+    def Q_ins(i, j):
       return f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) / sum(f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) for j in range(0, Agent.n))
     nums = list(range(0, Agent.n))
-    weights = [Q(idx, j) for j in nums]
+    weights = [Q_ins(idx, j) for j in nums] if ins else [Q(idx, j) for j in nums]
     return random.choices(nums, weights)[0]
   def act(self):
     
     # select instruction head a[j] with max? probability Q(IP, j)
-    ins_idx = self.getDecision(self.InsPtr)
+    ins_idx = self.getDecision(self.InsPtr, True)
     self.time += 1
     self.InsStat[Agent.tab_ins[ins_idx][0]] += 1
 
@@ -361,7 +366,7 @@ class Agent():
 
     # external reward
     if self.ER != 0:
-      self.State[8] = self.ER
+        self.State[8] = self.ER
 
     # TODO if an input has changed S0-S8, then shift S0-S80 to S9-S89
     
