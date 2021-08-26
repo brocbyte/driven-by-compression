@@ -10,6 +10,7 @@ class Agent():
   InsBlockSize = 9
   m = InsBlockSize * (n * n // InsBlockSize)
   M = 100000
+  random.seed(100)
   def __init__(self, walls = []):
     self.State = [0] * Agent.m
     self.State[0], self.State[1] = 500, 500
@@ -241,7 +242,7 @@ class Agent():
       return
     loser = loser > 0
     def diff(xs, ys):
-      return sum(abs(x - y) for x, y in zip(xs, ys)) > 0.01
+      return sum(abs(x - y) for x, y in zip(xs, ys)) != 0
     for x in range(0, Agent.m):
       if diff(self.Brain[0][x], self.Brain[1][x]):
         self.saveBrainCol(loser, x)
@@ -332,6 +333,8 @@ class Agent():
         if val[0] == anti:
           return i 
     def Q(i, j):
+      assert i < Agent.m
+      assert j < Agent.n
       return f(self.Brain[0][i][j], self.Brain[1][i][j]) / sum(f(x, y) for (x,y) in zip(self.Brain[0][i], self.Brain[1][i]))
     def Q_ins(i, j):
       return f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) / sum(f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) for j in range(0, Agent.n))
@@ -348,7 +351,7 @@ class Agent():
     # select arguments 
     params = []
     for i in range(1, Agent.tab_ins[ins_idx][1] + 1):
-      param = self.getDecision(self.InsPtr + i)
+      param = self.getDecision((self.InsPtr + i) % Agent.m)
       self.time += 1
       params.append(param)
     # print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
@@ -383,8 +386,8 @@ class Agent():
       self.NewInput = False
     
     if Agent.tab_ins[ins_idx][0] != "Jmpl" and Agent.tab_ins[ins_idx][0] != "Jmpeq":
-      w1 = self.getDecision(self.InsPtr + 7)
-      w2 = self.getDecision(self.InsPtr + 8)
+      w1 = self.getDecision((self.InsPtr + 7) % Agent.m)
+      w2 = self.getDecision((self.InsPtr + 8) % Agent.m)
       self.time += 2
       w = (w1 * Agent.n + w2) % Agent.m
       self.InsPtr = w - (w % Agent.InsBlockSize)

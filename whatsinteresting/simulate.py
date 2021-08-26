@@ -27,21 +27,21 @@ lastTime = 0
 def redraw():
   global x, y
   global lastTime
-  if agent.time - lastTime >= 100000:
-    print("# " + str(agent.time))
+  if agent.time - lastTime >= 10000:
+    print("# " + f'{agent.time:,}')
     print("SL: %d, SR: %d" % (len(agent.Stack[0]), len(agent.Stack[1])))
     print("RL: %d, RR: %d" % (agent.IR[0], agent.IR[1]))
     print(sorted(agent.InsStat.items(), key=lambda item: item[1]))
     lastTime = agent.time
 
   # print("(%d ; %d)" % (x, y))
-  canvas.after(delta_t,redraw)
   agent.act()
   nx, ny = agent.State[0], agent.State[1]
   canvas.create_oval(x, y, x + dot_size, y + dot_size, outline="white", fill="green") 
   canvas.move(dot, nx - x, ny - y)
   x, y = nx, ny
-  canvas.update()
+  #canvas.update()
+  canvas.after(delta_t,redraw)
  
 '''
 steps = int(1e6)
@@ -50,6 +50,5 @@ for i in range(0, steps):
 
 print("%d steps passed!" % steps)
 '''
-
 canvas.after(delta_t, redraw)
 root.mainloop()
