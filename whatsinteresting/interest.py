@@ -39,6 +39,7 @@ class Agent():
 
     self.BlockSSA = [False] * 2
     self.InsStat = defaultdict(int)
+    self.NewInput = False
 
   # SSA Calls
   # https://people.idsia.ch/~juergen/mljssalevin/node2.html
@@ -123,6 +124,7 @@ class Agent():
       self.IR[1] += c
     # surprise rewards become visible in the form of inputs
     self.State[7] = c
+    self.NewInput = True
 
   def ins_GetLeft(self, params, clean_params):
     if clean_params[0] > 8:
@@ -263,6 +265,8 @@ class Agent():
     left_v  = [[x, y], [24 * (x + math.cos(d + math.pi / 2)), 24 * (y + math.sin(d + math.pi / 2))]]
     self.State[6] = 24 if any(intersect(wall, left_v) for wall in self.walls) else 0
 
+    self.NewInput = True
+
 
 
   def ins_MoveAgent(self, params, clean_params):
@@ -276,9 +280,12 @@ class Agent():
     if not any(intersect(wall, move) for wall in self.walls):
       self.State[0], self.State[1] = nx, ny
     self.updateInputs()
+    self.NewInput = True
+
   def ins_SetDirection(self, params, clean_params):
     self.State[2] = params[0] / Agent.n * 100
     self.updateInputs()
+    self.NewInput = True
 
   tab_ins = [
       ["Jmpl", 6], ["Jmpeq", 6],
@@ -367,8 +374,13 @@ class Agent():
     # external reward
     if self.ER != 0:
         self.State[8] = self.ER
+        self.NewInput = True
 
-    # TODO if an input has changed S0-S8, then shift S0-S80 to S9-S89
+    # if an input has changed S0-S8, then shift S0-S80 to S9-S89
+    if self.NewInput:
+      for i in range(89, 8, -1):
+        self.State[i] = self.State[i - 9]
+      self.NewInput = False
     
     if Agent.tab_ins[ins_idx][0] != "Jmpl" and Agent.tab_ins[ins_idx][0] != "Jmpeq":
       w1 = self.getDecision(self.InsPtr + 7)

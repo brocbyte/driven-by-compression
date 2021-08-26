@@ -22,17 +22,17 @@ canvas.pack()
 dot_size = 8 
 x, y = agent.State[0], agent.State[1]
 dot = canvas.create_oval(x, y, x + dot_size, y + dot_size, outline="white", fill="green") 
-ts = 0
 
+lastTime = 0
 def redraw():
   global x, y
-  global ts
-  ts += 1
-  if ts % 1000 == 0:
-    print("# " + str(ts))
+  global lastTime
+  if agent.time - lastTime >= 100000:
+    print("# " + str(agent.time))
     print("SL: %d, SR: %d" % (len(agent.Stack[0]), len(agent.Stack[1])))
     print("RL: %d, RR: %d" % (agent.IR[0], agent.IR[1]))
     print(sorted(agent.InsStat.items(), key=lambda item: item[1]))
+    lastTime = agent.time
 
   # print("(%d ; %d)" % (x, y))
   canvas.after(delta_t,redraw)
