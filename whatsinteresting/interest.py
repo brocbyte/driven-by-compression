@@ -13,7 +13,6 @@ class Agent():
   random.seed(100)
   def __init__(self, walls = []):
     self.State = [0] * Agent.m
-    self.State[0], self.State[1] = 500, 500
     self.Brain = []
     for i in range(0, 2):
       b = []
@@ -30,7 +29,9 @@ class Agent():
     self.InsPtr = 0
     self.Stack = [[], []]
     self.walls = walls
-    self.time = 1
+    self.pos = [500.0, 500.0]
+    self.direction = 0.0
+    self.time = 0
     # stack elements look like that:
     # [t, RL(t), (c1, Left(c1)), ...]
     # where t - checkpoint time
@@ -39,54 +40,49 @@ class Agent():
     #       Left(c1) - previous Left-column
 
     self.BlockSSA = [False] * 2
-    self.InsStat = defaultdict(int)
     self.NewInput = False
 
     self.BS = [i * Agent.InsBlockSize for i in range(Agent.m) if i * Agent.InsBlockSize < Agent.m]
     self.noBS = [x for x in range(Agent.m) if x not in self.BS]
     self.Q = np.zeros((Agent.m, Agent.n))
 
+    
+    self.InsStat = defaultdict(int)
+    self.RewardTrack = [[], []]
+    self.StackTrack = [[], []]
+    self.path = []
+
   # SSA Calls
   # https://people.idsia.ch/~juergen/mljssalevin/node2.html
   def SSA(self, right):
     if not self.BlockSSA[right]:
       self.BlockSSA[right] = True
-      while True:
 
-        # t is a new checkpoint
-        t = self.time
+      # t is a new checkpoint
+      t = self.time
 
-        # backtracking
+      while self.Stack[right]:
+        # t' and t''
+        [t1, IRt1] = self.Stack[right][-1][:2]
+        [t2, IRt2] = self.Stack[right][-2][:2] if len(self.Stack[right]) >= 2 else [0, 0]
 
-        # trivial case
-        if len(self.Stack[right]) == 0:
-          self.InsStat["append"] += 1
-          self.Stack[right].append([t, self.IR[right], dict()])
+        # main induct rule
+        assert t != t2
+        assert t != t1
+        if (self.IR[right] - IRt1) / (t - t1) > (self.IR[right] - IRt2) / (t - t2):
+          # we're cool!
           break
         else:
-          # t' and t''
-          [t1, IRt1] = self.Stack[right][-1][:2]
-          [t2, IRt2] = self.Stack[right][-2][:2] if len(self.Stack[right]) >= 2 else [0, 0]
+          # pop t1 block, restore everything as it was before t1
+          self.InsStat["pop"] += 1
+          lblock = self.Stack[right].pop()
+          modifs = lblock[2]
+          for k, v in modifs.items():
+            for i in range(0, len(self.Brain[right][k])):
+              self.Brain[right][k][i] = v[i]
 
-          # main induct rule
-          assert t != t2
-          assert t != t1
-          if (self.IR[right] - IRt1) / (t - t1) > (self.IR[right] - IRt2) / (t - t2):
-            self.InsStat["append"] += 1
-            self.Stack[right].append([t, self.IR[right], dict()])
-            break
-          else:
-            self.InsStat["pop"] += 1
-            # pop t1 block, restore everything as it was before t1
-            lblock = self.Stack[right].pop()
-            modifs = lblock[2]
-            for k, v in modifs.items():
-              # restore modif
-              assert len(self.Brain[right][k]) == len(v)
-              for i in range(0, len(self.Brain[right][k])):
-                self.Brain[right][k][i] = v[i]
-      self.time += 1
-      assert len(self.Stack[right]) > 0
+      self.InsStat["append"] += 1
+      self.Stack[right].append([t, self.IR[right], dict()])
 
   def ins_Jmpl(self, params, clean_params):
     if self.State[clean_params[0]] < self.State[clean_params[1]]:
@@ -96,25 +92,19 @@ class Agent():
       self.InsPtr = clean_params[2] - (clean_params[2] % Agent.InsBlockSize)
 
   def ins_Add(self, params, clean_params):
-    if clean_params[2] > 8:
-      self.State[clean_params[2]] = (self.State[clean_params[0]] + self.State[clean_params[1]]) % Agent.M
+    self.State[clean_params[2]] = (self.State[clean_params[0]] + self.State[clean_params[1]]) % Agent.M
   def ins_Sub(self, params, clean_params):
-    if clean_params[2] > 8:
-      self.State[clean_params[2]] = (self.State[clean_params[0]] - self.State[clean_params[1]]) % Agent.M
+    self.State[clean_params[2]] = (self.State[clean_params[0]] - self.State[clean_params[1]]) % Agent.M
   def ins_Mul(self, params, clean_params):
-    if clean_params[2] > 8:
-      self.State[clean_params[2]] = (self.State[clean_params[0]] * self.State[clean_params[1]]) % Agent.M
+    self.State[clean_params[2]] = (self.State[clean_params[0]] * self.State[clean_params[1]]) % Agent.M
   def ins_Div(self, params, clean_params):
-    if clean_params[2] > 8:
-      if self.State[clean_params[1]] != 0:
-        self.State[clean_params[2]] = (self.State[clean_params[0]] // self.State[clean_params[1]]) % Agent.M
+    if self.State[clean_params[1]] != 0:
+      self.State[clean_params[2]] = (self.State[clean_params[0]] // self.State[clean_params[1]]) % Agent.M
 
   def ins_Mov(self, params, clean_params):
-    if clean_params[1] > 8:
-      self.State[clean_params[1]] = self.State[clean_params[0]]
+    self.State[clean_params[1]] = self.State[clean_params[0]]
   def ins_Init(self, params, clean_params):
-    if clean_params[1] > 8:
-      self.State[clean_params[1]] = clean_params[0]
+    self.State[clean_params[1]] = clean_params[0]
 
   def ins_Bet(self, params, clean_params):
     c, d = params[4], params[5]
@@ -132,11 +122,9 @@ class Agent():
     self.NewInput = True
 
   def ins_GetLeft(self, params, clean_params):
-    if clean_params[0] > 8:
-      self.State[clean_params[0]] = math.ceil(Agent.M * self.Brain[0][clean_params[0]][params[2]])
+    self.State[clean_params[0]] = math.ceil(Agent.M * self.Brain[0][clean_params[0]][params[2]])
   def ins_GetRight(self, params, clean_params):
-    if clean_params[0] > 8:
-      self.State[clean_params[0]] = math.ceil(Agent.M * self.Brain[1][clean_params[0]][params[2]])
+    self.State[clean_params[0]] = math.ceil(Agent.M * self.Brain[1][clean_params[0]][params[2]])
 
   def ins_EnableSSALeft(self, params, clean_params):
     if params[0] < 10:
@@ -150,7 +138,7 @@ class Agent():
   def saveBrainCol(self, right, column):
     assert len(self.Stack[right]) > 0
     if column not in self.Stack[right][-1][2]:
-      self.Stack[right][-1][2][column] = self.Brain[right][column].copy()
+      self.Stack[right][-1][2][column] = self.Brain[right][column][:]
     
   def IncProb(self, right, params, clean_params):
     self.SSA(right)
@@ -167,7 +155,6 @@ class Agent():
       assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
       for k in range(0, len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
-    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.m))
 
   def DecProb(self, right, params, clean_params):
     self.SSA(right)
@@ -184,7 +171,6 @@ class Agent():
       assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
       for k in range(0, len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
-    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.m))
 
   def MoveDist(self, right, params, clean_params):
     self.SSA(right)
@@ -192,11 +178,6 @@ class Agent():
     self.saveBrainCol(right, x)
     for k in range(0, len(self.Brain[right][x])):
       self.Brain[right][x][k] = self.Brain[right][y][k]
-    if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
-      assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
-      for k in range(0, len(self.Brain[right][x])):
-        self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
-    assert all(all(elem >= Agent.MinProb for elem in self.Brain[right][x]) for x in range(0, Agent.m))
 
   def ins_IncProbLeft(self, params, clean_params):
     self.IncProb(False, params, clean_params)
@@ -240,7 +221,8 @@ class Agent():
     t = self.time
     [tl, rl] = self.Stack[0][-1][:2] if len(self.Stack[0]) > 0 else [0, 0]
     [tr, rr] = self.Stack[1][-1][:2] if len(self.Stack[1]) > 0 else [0, 0]
-    assert t > tl and t > tr
+    if t == tl or t == tr:
+      return
     loser = (self.IR[0] - rl) / (t - tl) - (self.IR[1] - rr) / (t - tr)
     if loser == 0:
       return
@@ -257,7 +239,12 @@ class Agent():
 
   
   def updateInputs(self):
-    x, y, d = self.State[0], self.State[1], self.State[2] / 100 * (2 * math.pi)
+    x, y, d = self.pos[0], self.pos[1], self.direction
+
+    self.State[0] = np.round(x)
+    self.State[1] = np.round(y)
+    self.State[2] = np.round(d / (2 * math.pi) * 100)
+
     front_v = [[x, y], [24 * (x + math.cos(d)), 24 * (y + math.sin(d))]]
     self.State[3] = 24 if any(intersect(wall, front_v) for wall in self.walls) else 0
 
@@ -276,19 +263,19 @@ class Agent():
 
   def ins_MoveAgent(self, params, clean_params):
     Vel = 10 
-    x, y, d = self.State[0], self.State[1], self.State[2] / 100 * (2 * math.pi)
+    x, y, d = self.pos[0], self.pos[1], self.direction
     move = [[x, y], [x + Vel * math.cos(d), y + Vel * math.sin(d)]]
     assert abs((move[1][0] - x) ** 2 + (move[1][1] - y) ** 2 - Vel ** 2) < 1e-6
     nx, ny = int(move[1][0]), int(move[1][1])
     move[1][0] += 30 * math.cos(d)
     move[1][1] += 30 * math.sin(d)
     if not any(intersect(wall, move) for wall in self.walls):
-      self.State[0], self.State[1] = nx, ny
+      self.pos = [nx, ny]
     self.updateInputs()
     self.NewInput = True
 
   def ins_SetDirection(self, params, clean_params):
-    self.State[2] = params[0] / Agent.n * 100
+    self.direction = params[0] / Agent.n * (2 * math.pi)
     self.updateInputs()
     self.NewInput = True
 
@@ -352,34 +339,35 @@ class Agent():
     return np.random.choice(Agent.n, 1, p = self.Q[idx])[0]
     
   def act(self):
-    self.updateQ() 
-    # select instruction head a[j] with max? probability Q(IP, j)
-    ins_idx = self.getDecision(self.InsPtr)
+    for i in range(2):
+      self.StackTrack[i].append(len(self.Stack[i]))
+      self.RewardTrack[i].append(self.IR[i])
+    self.path.append(self.pos)
     self.time += 1
+
+    # select instruction head a[j]
+    self.updateQ() 
+    ins_idx = self.getDecision(self.InsPtr)
     self.InsStat[Agent.tab_ins[ins_idx][0]] += 1
 
     # select arguments 
     params = []
-    for i in range(1, Agent.tab_ins[ins_idx][1] + 1):
-      param = self.getDecision(self.InsPtr + i)
-      self.time += 1
+    for i in range(Agent.tab_ins[ins_idx][1]):
+      param = self.getDecision(self.InsPtr + i + 1)
       params.append(param)
     # print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
 
     # take care of Bet!
     if Agent.tab_ins[ins_idx][0] == "Bet":
-      nums = list(range(0, Agent.n))
-      weights = [self.Brain[0][self.InsPtr + 5][j] for j in nums]
-      weights = weights / np.sum(weights)
-      c = np.random.choice(Agent.n, 1, p = weights)[0]
-      self.time += 1
+      pc = self.Brain[0][self.InsPtr + 5]
+      pc = pc / np.sum(pc)
+      c = np.random.choice(Agent.n, 1, p = pc)[0]
       c = 1 if c > (Agent.n / 2) else -1
       params.append(c)
 
-      weights = [self.Brain[1][self.InsPtr + 5][j] for j in nums]
-      weights = weights / np.sum(weights)
-      d = np.random.choice(Agent.n, 1, p = weights)[0]
-      self.time += 1
+      pd = self.Brain[1][self.InsPtr + 5]
+      pd = pd / np.sum(pd)
+      d = np.random.choice(Agent.n, 1, p = pd)[0]
       d = 1 if d > (Agent.n / 2) else -1
       params.append(d)
     
@@ -400,8 +388,5 @@ class Agent():
     if Agent.tab_ins[ins_idx][0] != "Jmpl" and Agent.tab_ins[ins_idx][0] != "Jmpeq":
       w1 = self.getDecision(self.InsPtr + 7)
       w2 = self.getDecision(self.InsPtr + 8)
-      self.time += 2
       w = (w1 * Agent.n + w2) % Agent.m
       self.InsPtr = w - (w % Agent.InsBlockSize)
-    assert all(all(elem >= Agent.MinProb for elem in self.Brain[0][x]) for x in range(0, Agent.m))
-    assert all(all(elem >= Agent.MinProb for elem in self.Brain[1][x]) for x in range(0, Agent.m))
