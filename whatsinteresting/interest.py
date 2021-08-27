@@ -42,6 +42,10 @@ class Agent():
     self.InsStat = defaultdict(int)
     self.NewInput = False
 
+    self.BS = [i * Agent.InsBlockSize for i in range(Agent.m) if i * Agent.InsBlockSize < Agent.m]
+    self.noBS = [x for x in range(Agent.m) if x not in self.BS]
+    self.Q = np.zeros((Agent.m, Agent.n))
+
   # SSA Calls
   # https://people.idsia.ch/~juergen/mljssalevin/node2.html
   def SSA(self, right):
@@ -313,9 +317,8 @@ class Agent():
     assert len(clean_params) == len(params) // 2
     ins_method(params, clean_params)
 
-  def getDecision(self, idx, ins = False):
-    def f(x, y):
-      return x * y
+  
+  def updateQ(self):
     def g(idx):
       d = dict()
       d["GetLeft"] = "GetRight"
@@ -332,26 +335,33 @@ class Agent():
       for i, val in enumerate(Agent.tab_ins):
         if val[0] == anti:
           return i 
-    def Q(i, j):
-      assert i < Agent.m
-      assert j < Agent.n
-      return f(self.Brain[0][i][j], self.Brain[1][i][j]) / sum(f(x, y) for (x,y) in zip(self.Brain[0][i], self.Brain[1][i]))
-    def Q_ins(i, j):
-      return f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) / sum(f(self.Brain[0][i][j], self.Brain[1][i][g(j)]) for j in range(0, Agent.n))
-    nums = list(range(0, Agent.n))
-    weights = [Q_ins(idx, j) for j in nums] if ins else [Q(idx, j) for j in nums]
-    return random.choices(nums, weights)[0]
-  def act(self):
+    def f(x, y):
+      return x * y
+    for i in self.noBS:
+      for j in range(Agent.n):
+        self.Q[i][j] = f(self.Brain[1][i][j], self.Brain[1][i][j])
+      normalizer = sum(self.Q[i])
+      self.Q[i] /= normalizer
+    for i in self.BS:
+      for j in range(Agent.n):
+        self.Q[i][j] = f(self.Brain[0][i][j], self.Brain[1][i][g(j)])
+      normalizer = sum(self.Q[i])
+      self.Q[i] /= normalizer
+      
+  def getDecision(self, idx):
+    return np.random.choice(Agent.n, 1, p = self.Q[idx])[0]
     
+  def act(self):
+    self.updateQ() 
     # select instruction head a[j] with max? probability Q(IP, j)
-    ins_idx = self.getDecision(self.InsPtr, True)
+    ins_idx = self.getDecision(self.InsPtr)
     self.time += 1
     self.InsStat[Agent.tab_ins[ins_idx][0]] += 1
 
     # select arguments 
     params = []
     for i in range(1, Agent.tab_ins[ins_idx][1] + 1):
-      param = self.getDecision((self.InsPtr + i) % Agent.m)
+      param = self.getDecision(self.InsPtr + i)
       self.time += 1
       params.append(param)
     # print("exec %s with args %s" % (Agent.tab_ins[ins_idx][0], params))
@@ -359,14 +369,16 @@ class Agent():
     # take care of Bet!
     if Agent.tab_ins[ins_idx][0] == "Bet":
       nums = list(range(0, Agent.n))
-      weights = [(self.Brain[0][self.InsPtr + 5][j] / sum(self.Brain[0][self.InsPtr + 5])) for j in nums]
-      c = random.choices(nums, weights)[0]
+      weights = [self.Brain[0][self.InsPtr + 5][j] for j in nums]
+      weights = weights / np.sum(weights)
+      c = np.random.choice(Agent.n, 1, p = weights)[0]
       self.time += 1
       c = 1 if c > (Agent.n / 2) else -1
       params.append(c)
 
-      weights = [(self.Brain[1][self.InsPtr + 5][j] / sum(self.Brain[1][self.InsPtr + 5])) for j in nums]
-      d = random.choices(nums, weights)[0]
+      weights = [self.Brain[1][self.InsPtr + 5][j] for j in nums]
+      weights = weights / np.sum(weights)
+      d = np.random.choice(Agent.n, 1, p = weights)[0]
       self.time += 1
       d = 1 if d > (Agent.n / 2) else -1
       params.append(d)
@@ -386,8 +398,8 @@ class Agent():
       self.NewInput = False
     
     if Agent.tab_ins[ins_idx][0] != "Jmpl" and Agent.tab_ins[ins_idx][0] != "Jmpeq":
-      w1 = self.getDecision((self.InsPtr + 7) % Agent.m)
-      w2 = self.getDecision((self.InsPtr + 8) % Agent.m)
+      w1 = self.getDecision(self.InsPtr + 7)
+      w2 = self.getDecision(self.InsPtr + 8)
       self.time += 2
       w = (w1 * Agent.n + w2) % Agent.m
       self.InsPtr = w - (w % Agent.InsBlockSize)
