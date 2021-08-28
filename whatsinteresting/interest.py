@@ -11,6 +11,18 @@ class Agent():
   m = InsBlockSize * (n * n // InsBlockSize)
   M = 100000
   random.seed(100)
+  tab_ins = [
+      ["Jmpl", 6], ["Jmpeq", 6],
+      ["Add", 6], ["Sub", 6], ["Mul", 6], ["Div", 6],
+      ["Mov", 4], ["Init", 4],
+      ["Bet", 4],
+      ["GetLeft", 3], ["GetRight", 3],
+      ["EnableSSALeft", 1], ["EnableSSARight", 1],
+      ["IncProbLeft", 3], ["DecProbLeft", 3], ["MoveDistLeft", 4],
+      ["IncProbRight", 3], ["DecProbRight", 3], ["MoveDistRight", 4],
+      ["IncProbBoth", 3], ["DecProbBoth", 3], ["SSAandCopy", 1],
+      ["MoveAgent", 0], ["SetDirection", 1]
+  ]
   def __init__(self, walls = []):
     self.State = [0] * Agent.m
     self.Brain = []
@@ -47,10 +59,16 @@ class Agent():
     self.Q = np.zeros((Agent.m, Agent.n))
 
     
-    self.InsStat = defaultdict(int)
+
+    self.InsStat = [0] * Agent.n
+    self.InsTrack = [[] for _ in range(Agent.n)]
     self.RewardTrack = [[], []]
     self.StackTrack = [[], []]
     self.path = []
+
+    Agent.name_to_idx = dict()
+    for idx, ins in enumerate(Agent.tab_ins):
+      Agent.name_to_idx[ins[0]] = idx
 
   # SSA Calls
   # https://people.idsia.ch/~juergen/mljssalevin/node2.html
@@ -74,14 +92,12 @@ class Agent():
           break
         else:
           # pop t1 block, restore everything as it was before t1
-          self.InsStat["pop"] += 1
           lblock = self.Stack[right].pop()
           modifs = lblock[2]
           for k, v in modifs.items():
             for i in range(0, len(self.Brain[right][k])):
               self.Brain[right][k][i] = v[i]
 
-      self.InsStat["append"] += 1
       self.Stack[right].append([t, self.IR[right], dict()])
 
   def ins_Jmpl(self, params, clean_params):
@@ -152,7 +168,6 @@ class Agent():
 
     # we've saved it already
     if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
-      assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
       for k in range(0, len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
 
@@ -168,7 +183,6 @@ class Agent():
       else:
         self.Brain[right][x][k] *= Agent.lambda_const
     if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
-      assert len(self.Brain[right][x]) == len(self.Stack[right][-1][2][x])
       for k in range(0, len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
 
@@ -279,29 +293,15 @@ class Agent():
     self.updateInputs()
     self.NewInput = True
 
-  tab_ins = [
-      ["Jmpl", 6], ["Jmpeq", 6],
-      ["Add", 6], ["Sub", 6], ["Mul", 6], ["Div", 6],
-      ["Mov", 4], ["Init", 4],
-      ["Bet", 4],
-      ["GetLeft", 3], ["GetRight", 3],
-      ["EnableSSALeft", 1], ["EnableSSARight", 1],
-      ["IncProbLeft", 3], ["DecProbLeft", 3], ["MoveDistLeft", 4],
-      ["IncProbRight", 3], ["DecProbRight", 3], ["MoveDistRight", 4],
-      ["IncProbBoth", 3], ["DecProbBoth", 3], ["SSAandCopy", 1],
-      ["MoveAgent", 0], ["SetDirection", 1]
-  ]
+  
           
 
   def exec_ins(self, ins_idx, params):
     ins_name = 'ins_' + Agent.tab_ins[ins_idx][0]
-    assert Agent.tab_ins[ins_idx][1] == len(params) or (Agent.tab_ins[ins_idx][0] == "Bet" and len(params) == 6)
     ins_method = getattr(self, ins_name)
     clean_params = []
     for i in range(0, len(params) - 1, 2):
-      assert i + 1 < len(params) 
       clean_params.append((params[i] * Agent.n + params[i+1]) % Agent.m)
-    assert len(clean_params) == len(params) // 2
     ins_method(params, clean_params)
 
   
@@ -342,13 +342,15 @@ class Agent():
     for i in range(2):
       self.StackTrack[i].append(len(self.Stack[i]))
       self.RewardTrack[i].append(self.IR[i])
+    for i in range(Agent.n):
+      self.InsTrack[i].append(self.InsStat[i])
     self.path.append(self.pos)
     self.time += 1
 
     # select instruction head a[j]
     self.updateQ() 
     ins_idx = self.getDecision(self.InsPtr)
-    self.InsStat[Agent.tab_ins[ins_idx][0]] += 1
+    self.InsStat[ins_idx] += 1
 
     # select arguments 
     params = []

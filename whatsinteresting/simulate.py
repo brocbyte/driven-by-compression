@@ -60,6 +60,17 @@ RIGHT, = plt.plot(RIGHT_stack_track,'--')
 plt.legend([LEFT, RIGHT], ['LEFT Stack', 'RIGHT Stack'])
 plt.show()
 
+tracked_ins = ["Add", "Bet", "Sub"]
+
+ins_tracks = [np.array(agent.InsTrack[agent.name_to_idx[name]]) for name in tracked_ins]
+plt.xlim(-.2, T)
+plt.ylim(min(min(itrack) for itrack in ins_tracks), max(max(itrack) for itrack in ins_tracks))
+
+plots = list(plt.plot(itrack, label = tracked_ins[i]) for i, itrack in enumerate(ins_tracks))
+#plots = [x for x,y in plots]
+plt.legend()
+plt.show()
+
 
 def redraw():
   global x, y, T
