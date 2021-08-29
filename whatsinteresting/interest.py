@@ -10,7 +10,6 @@ class Agent():
   InsBlockSize = 9
   m = InsBlockSize * (n * n // InsBlockSize)
   M = 100000
-  random.seed(100)
   tab_ins = [
       ["Jmpl", 6], ["Jmpeq", 6],
       ["Add", 6], ["Sub", 6], ["Mul", 6], ["Div", 6],
@@ -24,17 +23,8 @@ class Agent():
       ["MoveAgent", 0], ["SetDirection", 1]
   ]
   def __init__(self, walls = []):
-    self.State = [0] * Agent.m
-    self.Brain = []
-    for i in range(0, 2):
-      b = []
-      for j in range(0, Agent.m):
-        c = []
-        for k in range(0, Agent.n):
-          c.append(1 / Agent.n)
-        b.append(c)
-      self.Brain.append(b)
-
+    self.State = np.zeros(Agent.m, dtype = np.int64)
+    self.Brain = [np.ones((Agent.m, Agent.n)) / Agent.n for _ in range(2)]
     self.ER = 0
     # we should maintain RL(t), RR(t) - current time, and RLs, RRs on Stacks
     self.IR = [0] * 2
@@ -60,7 +50,7 @@ class Agent():
 
     
 
-    self.InsStat = [0] * Agent.n
+    self.InsStat = np.zeros(Agent.n, dtype = np.int32)
     self.InsTrack = [[] for _ in range(Agent.n)]
     self.RewardTrack = [[], []]
     self.StackTrack = [[], []]
@@ -92,10 +82,9 @@ class Agent():
           break
         else:
           # pop t1 block, restore everything as it was before t1
-          lblock = self.Stack[right].pop()
-          modifs = lblock[2]
-          for k, v in modifs.items():
-            for i in range(0, len(self.Brain[right][k])):
+          delblock = self.Stack[right].pop()
+          for k, v in delblock[2].items():
+            for i in range(len(self.Brain[right][k])):
               self.Brain[right][k][i] = v[i]
 
       self.Stack[right].append([t, self.IR[right], dict()])
@@ -138,9 +127,9 @@ class Agent():
     self.NewInput = True
 
   def ins_GetLeft(self, params, clean_params):
-    self.State[clean_params[0]] = math.ceil(Agent.M * self.Brain[0][clean_params[0]][params[2]])
+    self.State[clean_params[0]] = np.round(Agent.M * self.Brain[0][clean_params[0]][params[2]])
   def ins_GetRight(self, params, clean_params):
-    self.State[clean_params[0]] = math.ceil(Agent.M * self.Brain[1][clean_params[0]][params[2]])
+    self.State[clean_params[0]] = np.round(Agent.M * self.Brain[1][clean_params[0]][params[2]])
 
   def ins_EnableSSALeft(self, params, clean_params):
     if params[0] < 10:
@@ -160,31 +149,35 @@ class Agent():
     self.SSA(right)
     x = clean_params[0]
     self.saveBrainCol(right, x)
-    for k in range(0, len(self.Brain[right][x])):
+    for k in range(len(self.Brain[right][x])):
       if k == params[2]:
         self.Brain[right][x][k] = 1 - Agent.lambda_const * (1 - self.Brain[right][x][k])
       else:
         self.Brain[right][x][k] *= Agent.lambda_const
 
-    # we've saved it already
-    if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
-      for k in range(0, len(self.Brain[right][x])):
+    if any(elem < Agent.MinProb or elem > 1.0 for elem in self.Brain[right][x]):
+      for k in range(len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
+    assert abs(sum(self.Brain[right][x]) - 1) < 1e-3
 
   def DecProb(self, right, params, clean_params):
     self.SSA(right)
     x = clean_params[0]
     self.saveBrainCol(right, x)
-    for k in range(0, len(self.Brain[right][x])):
-      if k != params[2]:
-        self.Brain[right][x][k] = ((1 - Agent.lambda_const * self.Brain[right][x][k]) \
-                                  / (1 - self.Brain[right][x][k])) \
-                                  * self.Brain[right][x][k]
+    y1 = params[2]
+    # in paper sum of probs doesn't equal 1
+    mult = (1 - Agent.lambda_const * self.Brain[right][x][y1]) / (1 - self.Brain[right][x][y1])
+    for k in range(len(self.Brain[right][x])):
+      if k != y1:
+        self.Brain[right][x][k] *= mult 
       else:
         self.Brain[right][x][k] *= Agent.lambda_const
-    if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
-      for k in range(0, len(self.Brain[right][x])):
+    if any(elem < Agent.MinProb or elem > 1.0 for elem in self.Brain[right][x]):
+      for k in range(len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
+    if abs(sum(self.Brain[right][x]) - 1) >= 1e-6:
+      print(sum(self.Brain[right][x]))
+    assert abs(sum(self.Brain[right][x]) - 1) < 1e-3
 
   def MoveDist(self, right, params, clean_params):
     self.SSA(right)
