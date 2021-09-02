@@ -60,7 +60,8 @@ RIGHT, = plt.plot(RIGHT_stack_track,'--')
 plt.legend([LEFT, RIGHT], ['LEFT Stack', 'RIGHT Stack'])
 plt.show()
 
-tracked_ins = ["Add", "Bet", "Sub"]
+tracked_ins = [name for [name, nargs] in agent.tab_ins]
+tracked_ins = ["Bet", "IncProbLeft", "IncProbRight", "DecProbRight", "DecProbLeft", "MoveAgent"]
 
 ins_tracks = [np.array(agent.InsTrack[agent.name_to_idx[name]]) for name in tracked_ins]
 plt.xlim(-.2, T)

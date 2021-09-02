@@ -155,29 +155,28 @@ class Agent():
       else:
         self.Brain[right][x][k] *= Agent.lambda_const
 
-    if any(elem < Agent.MinProb or elem > 1.0 for elem in self.Brain[right][x]):
+    if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
       for k in range(len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
-    assert abs(sum(self.Brain[right][x]) - 1) < 1e-3
+    assert abs(sum(self.Brain[right][x]) - 1) < 1e-6
 
   def DecProb(self, right, params, clean_params):
     self.SSA(right)
     x = clean_params[0]
     self.saveBrainCol(right, x)
     y1 = params[2]
+    elm = self.Brain[right][x][y1]
     # in paper sum of probs doesn't equal 1
-    mult = (1 - Agent.lambda_const * self.Brain[right][x][y1]) / (1 - self.Brain[right][x][y1])
     for k in range(len(self.Brain[right][x])):
-      if k != y1:
-        self.Brain[right][x][k] *= mult 
-      else:
+      if k == y1:
         self.Brain[right][x][k] *= Agent.lambda_const
-    if any(elem < Agent.MinProb or elem > 1.0 for elem in self.Brain[right][x]):
+      else:
+        self.Brain[right][x][k] /= (1.0 - elm)
+        self.Brain[right][x][k] *= (1.0 - (Agent.lambda_const * elm))
+    if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
       for k in range(len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
-    if abs(sum(self.Brain[right][x]) - 1) >= 1e-6:
-      print(sum(self.Brain[right][x]))
-    assert abs(sum(self.Brain[right][x]) - 1) < 1e-3
+    assert abs(sum(self.Brain[right][x]) - 1) < 1e-1
 
   def MoveDist(self, right, params, clean_params):
     self.SSA(right)
