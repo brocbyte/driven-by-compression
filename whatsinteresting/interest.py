@@ -158,7 +158,7 @@ class Agent():
     if any(elem < Agent.MinProb for elem in self.Brain[right][x]):
       for k in range(len(self.Brain[right][x])):
         self.Brain[right][x][k] = self.Stack[right][-1][2][x][k]
-    assert abs(sum(self.Brain[right][x]) - 1) < 1e-6
+    assert abs(sum(self.Brain[right][x]) - 1) < 1e-1
 
   def DecProb(self, right, params, clean_params):
     self.SSA(right)
